@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-IF (AUTOCHECK) 
+IF (AUTOCHECK)
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
     # Look through https://st.yandex-team.ru/DEVTOOLSSUPPORT-39642 for more information.
@@ -25,6 +25,7 @@ SRCS(
     connector_recipe_ut_helpers.cpp
     kqp_generic_plan_ut.cpp
     kqp_generic_provider_join_ut.cpp
+    kqp_generic_provider_ut.cpp
     pg_recipe_ut_helpers.cpp
 )
 
