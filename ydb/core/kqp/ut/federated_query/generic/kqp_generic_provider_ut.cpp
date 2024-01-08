@@ -6,34 +6,51 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/format.h>
+
 #include <fmt/format.h>
 
 using namespace NTestUtils;
 using namespace fmt::literals;
 
-Y_UNIT_TEST_SUITE(GenericProviderTest) {
-    Y_UNIT_TEST(FindStringInPg) {
+Y_UNIT_TEST_SUITE(GenericProviderPushdownTest) {
+    size_t TableNum = 0;
+
+    TString GetTableName(TStringBuf name) {
+        return TStringBuilder() << name << '_' << TableNum;
+    }
+
+    void FindStringInPgImpl(const TString& pgTypeName, int padWithSpaces = -1) {
+        ++TableNum;
         pqxx::connection pgConnection = CreatePostgresqlConnection();
 
         // pg_table_find_string_test
         {
             pqxx::work work{pgConnection};
-            const TString sql = R"sql(
-                CREATE TABLE pg_table_find_string_test (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-            )sql";
+            const TString sql = fmt::format(
+                R"sql(
+                    CREATE TABLE {table_name} (
+                        key {type_name} PRIMARY KEY,
+                        value {type_name}
+                    )
+                )sql",
+                "table_name"_a = GetTableName("pg_table_find_string_test"),
+                "type_name"_a = pgTypeName
+            );
             work.exec(sql);
 
-            const TString insertData = R"sql(
-                INSERT INTO pg_table_find_string_test
-                    (key, value)
-                VALUES
-                    ('usual string',                        'usual string'),
-                    ('string with spaces at the end \n \t   ',    'string with spaces at the end \n \t   '),
-                    ('    string with spaces on start',     '    string with spaces on start');
-            )sql";
+            const TString insertData = fmt::format(
+                R"sql(
+                    INSERT INTO {table_name}
+                        (key, value)
+                    VALUES
+                        ('usual string',                        'usual string'),
+                        ('space ',                              'space '),
+                        ('string with spaces at the end     ',    'string with spaces at the end     '),
+                        ('    string with spaces on start',     '    string with spaces on start');
+                )sql",
+                "table_name"_a = GetTableName("pg_table_find_string_test")
+            );
             work.exec(insertData);
 
             work.commit();
@@ -41,27 +58,44 @@ Y_UNIT_TEST_SUITE(GenericProviderTest) {
 
         // we can find these strings without spaces
         {
-            auto findByKey = [&](const std::string& key, const std::string& expectedKey, const std::string& expectedValue) {
+            auto findByKey = [&](const std::string& key, const std::optional<std::string>& expectedKey, const std::optional<std::string>& expectedValue) {
                 pqxx::work work{pgConnection};
-                const TString sql = R"sql(
-                    SELECT * FROM pg_table_find_string_test
-                    WHERE key = $1;
-                )sql";
+                const TString sql = fmt::format(
+                    R"sql(
+                        SELECT * FROM {table_name}
+                        WHERE key = $1;
+                    )sql",
+                    "table_name"_a = GetTableName("pg_table_find_string_test")
+                );
 
                 Cerr << "Find row in postgresql by key: [" << key << "]" << Endl;
 
                 pqxx::result result = work.exec_params(sql, key);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.size(), 1, "Not found key: [" << key << "]");
-                pqxx::row row = *result.begin();
-                UNIT_ASSERT_VALUES_EQUAL(row["key"].c_str(), expectedKey);
-                UNIT_ASSERT_VALUES_EQUAL(row["value"].c_str(), expectedValue);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.size(), expectedKey ? 1 : 0, (expectedKey ? "Not found" : "Found") << " key: [" << key << "]");
+                if (expectedKey) {
+                    TStringBuilder k, v;
+                    if (padWithSpaces > 0) {
+                        k << RightPad(*expectedKey, padWithSpaces);
+                        v << RightPad(*expectedValue, padWithSpaces);
+                    } else {
+                        k << *expectedKey;
+                        v << *expectedValue;
+                    }
+                    pqxx::row row = *result.begin();
+                    UNIT_ASSERT_VALUES_EQUAL(row["key"].c_str(), k);
+                    UNIT_ASSERT_VALUES_EQUAL(row["value"].c_str(), v);
+                }
             };
+
             findByKey("usual string", "usual string", "usual string");
-            findByKey("string with spaces at the end", "string with spaces at the end \n \t   ", "string with spaces at the end \n \t   ");
-            findByKey("\n\nstring with spaces at the end\t", "string with spaces at the end \n \t   ", "string with spaces at the end \n \t   ");
-            findByKey("string with spaces on start", "    string with spaces on start", "    string with spaces on start");
-            findByKey("   string with spaces on start   ", "    string with spaces on start", "    string with spaces on start");
+            findByKey("space", "space ", "space ");
+            findByKey("string with spaces at the end", "string with spaces at the end     ", "string with spaces at the end     ");
+            findByKey("string with spaces at the end                ", "string with spaces at the end     ", "string with spaces at the end     ");
+            findByKey("string with spaces on start", std::nullopt, std::nullopt);
+            findByKey("string  with  spaces  at  the  end", std::nullopt, std::nullopt);
+            findByKey("    string with spaces on start   ", "    string with spaces on start", "    string with spaces on start");
         }
+
         return;
 
 
@@ -132,5 +166,13 @@ Y_UNIT_TEST_SUITE(GenericProviderTest) {
         const TMaybe<TString> name = resultSet.ColumnParser("name").GetOptionalUtf8();
         UNIT_ASSERT(name);
         UNIT_ASSERT_VALUES_EQUAL(name, "C");
+    }
+
+    Y_UNIT_TEST(FindStringInPgBpChar) {
+        FindStringInPgImpl("BPCHAR");
+    }
+
+    Y_UNIT_TEST(FindStringInPgCharacter) {
+        FindStringInPgImpl("CHARACTER(50)", 50);
     }
 }
