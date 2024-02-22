@@ -305,6 +305,7 @@ public:
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;
+    bool EnableAlterExternalEntities = false;
     bool EnableTempTables = false;
 
     TShardDeleter ShardDeleter;

@@ -538,6 +538,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
+    app.SetEnableAlterExternalEntities(opts.EnableAlterExternalEntities_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -569,7 +570,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         set.SetMinimumStepSeconds(5); // 5 seconds
     }
     //
-                                                        
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }

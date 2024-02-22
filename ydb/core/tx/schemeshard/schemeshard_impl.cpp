@@ -4340,6 +4340,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
+    EnableAlterExternalEntities = appData->FeatureFlags.GetEnableAlterExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
@@ -6865,6 +6866,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
+    EnableAlterExternalEntities = featureFlags.GetEnableAlterExternalEntities();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
