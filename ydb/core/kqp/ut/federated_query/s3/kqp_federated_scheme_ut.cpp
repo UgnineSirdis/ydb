@@ -16,6 +16,11 @@ using namespace NKikimr::NKqp::NFederatedQueryTest;
 using namespace NTestUtils;
 using namespace fmt::literals;
 
+void LogSql(const TString& sql, bool expectSuccess) {
+    Cerr << "Execute sql in test (expect " << (expectSuccess ? "success" : "fail") << "):\n"
+         << sql << Endl;
+};
+
 Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     Y_UNIT_TEST(ExternalTableDdl) {
         enum EEx {
@@ -29,11 +34,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
 
         auto queryClient = kikimr->GetQueryClient();
-
-        auto logSql = [](const TString& sql, bool expectSuccess) {
-            Cerr << "Execute sql in test (expect " << (expectSuccess ? "success" : "fail") << "):\n"
-                 << sql << Endl;
-        };
 
         auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 "name_suffix"_a = nameSuffix,
                 "if_not_exists"_a = ifNotExistsStatement
             );
-            logSql(sql, expectSuccess);
+            LogSql(sql, expectSuccess);
             auto result = queryClient.ExecuteQuery(
                 sql,
                 TTxControl::NoTx()).GetValueSync();
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 )sql",
                 "name_suffix"_a = nameSuffix
             );
-            logSql(sql, expectSuccess);
+            LogSql(sql, expectSuccess);
             auto result = queryClient.ExecuteQuery(
                 sql,
                 TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 "if_exists"_a = ifExistsStatement,
                 "name_suffix"_a = nameSuffix
             );
-            logSql(sql, expectSuccess);
+            LogSql(sql, expectSuccess);
             auto result = queryClient.ExecuteQuery(
                 sql,
                 TTxControl::NoTx()).GetValueSync();
@@ -144,6 +144,61 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         checkDrop(true, EEx::IfExists, 1); // real drop
         checkTableExists(false, 1);
         checkDrop(true, EEx::IfExists, 1);
+    }
+
+    Y_UNIT_TEST(AlterExternalDataSource) {
+        auto s3Client = MakeS3Client();
+
+        CreateBucket("AlterExternalDataSourceBucket", s3Client);
+        CreateBucket("AlterExternalDataSourceBucket2", s3Client);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto queryClient = kikimr->GetQueryClient();
+
+        // Create data source
+        {
+            const TString sql = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE test_data_source WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                )sql",
+                "location"_a = GetBucketLocation("AlterExternalDataSourceBucket")
+            );
+            LogSql(sql, true);
+
+            auto result = queryClient.ExecuteQuery(
+                sql,
+                TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto checkAlter = [&](const TString& setParamName, const TString& setParamValue, bool expectSuccess) {
+            const TString sql = fmt::format(R"sql(
+                ALTER EXTERNAL DATA SOURCE test_data_source
+                    SET ({param}={value});
+                )sql",
+                "location"_a = GetBucketLocation("CreateExternalDataSourceBucket2"),
+                "param"_a = setParamName,
+                "value"_a = setParamValue
+            );
+
+            LogSql(sql, expectSuccess);
+            auto result = queryClient.ExecuteQuery(
+                sql,
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            if (expectSuccess) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!result.IsSuccess());
+            }
+        };
+
+        checkAlter("LOCATION", TStringBuilder() << '"' << GetBucketLocation("CreateExternalDataSourceBucket2") << '"', true);
     }
 }
 
