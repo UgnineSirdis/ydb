@@ -180,11 +180,13 @@ namespace NSchemeShardUT_Private {
 
     // external table
     GENERIC_HELPERS(CreateExternalTable);
+    GENERIC_HELPERS(AlterExternalTable);
     GENERIC_HELPERS(DropExternalTable);
     DROP_BY_PATH_ID_HELPERS(DropExternalTable);
 
     // external data source
     GENERIC_HELPERS(CreateExternalDataSource);
+    GENERIC_HELPERS(AlterExternalDataSource);
     GENERIC_HELPERS(DropExternalDataSource);
     DROP_BY_PATH_ID_HELPERS(DropExternalDataSource);
 

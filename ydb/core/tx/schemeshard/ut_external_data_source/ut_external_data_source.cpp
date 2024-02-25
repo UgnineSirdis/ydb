@@ -560,4 +560,50 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
         TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathNotExist);
     }
+
+    Y_UNIT_TEST(AlterExternalDataSource) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterExternalEntities(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, 100);
+
+        TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathExist);
+
+        TestAlterExternalDataSource(runtime, txId++, "/MyRoot", R"(
+                Name: "MyExternalDataSource"
+                SourceType: "PostgreSQL"
+                Location: "localhost:5432"
+                Auth {
+                    Basic {
+                        Login: "my_login",
+                        PasswordSecretName: "password_secret"
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, 101);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "PostgreSQL");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "localhost:5432");
+            UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kBasic);
+        }
+    }
 }

@@ -31,7 +31,7 @@ bool CheckAuth(const TString& authMethod,
                const TVector<TString>& availableAuthMethods,
                TString& errStr) {
     if (Find(availableAuthMethods, authMethod) == availableAuthMethods.end()) {
-        errStr = TStringBuilder{} << authMethod << " isn't supported for this source type";
+        errStr = TStringBuilder{} << "Auth method " << authMethod << " isn't supported for this source type";
         return false;
     }
 

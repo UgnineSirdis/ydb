@@ -311,9 +311,9 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};
     };
 
-    const auto &operation = tx.GetCreateExternalDataSource();
+    const auto& operation = tx.GetCreateExternalDataSource();
     const auto replaceIfExists = operation.GetReplaceIfExists();
-    const TString &name = operation.GetName();
+    const TString& name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
         return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
@@ -336,7 +336,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                 .IsResolved()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
-            return {CreateAlterExternalDataSource(id, tx)};
+            return CreateReplaceExternalDataSource(id, tx);
         }
     }
 

@@ -886,7 +886,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(const TTxState& state) const {
+    const TTxState::ETxType txType = state.TxType;
+    const TTxState::ETxState txState = state.State;
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1062,13 +1064,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropExternalTable:
         return CreateDropExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalTable:
-        return CreateAlterExternalTable(NextPartId(), txState);
+        return CreateAlterExternalTable(NextPartId(), txState, state.NeedUpdateObject);
     case TTxState::ETxType::TxCreateExternalDataSource:
         return CreateNewExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalDataSource:
-        return CreateAlterExternalDataSource(NextPartId(), txState);
+        return CreateAlterExternalDataSource(NextPartId(), txState, state.NeedUpdateObject);
 
     // View
     case TTxState::ETxType::TxCreateView:
@@ -1353,8 +1355,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateCompatibleAlterExtSubDomain(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
         return CreateNewExternalDataSource(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
+        return CreateAlterExternalDataSource(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return CreateNewExternalTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
+        return CreateAlterExternalTable(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }

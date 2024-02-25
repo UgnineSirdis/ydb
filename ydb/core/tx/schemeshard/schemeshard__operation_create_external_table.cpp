@@ -404,9 +404,9 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalTable request: " << msg)};
     };
 
-    const auto &operation = tx.GetCreateExternalTable();
+    const auto& operation = tx.GetCreateExternalTable();
     const auto replaceIfExists = operation.GetReplaceIfExists();
-    const TString &name = operation.GetName();
+    const TString& name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
         return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
@@ -429,7 +429,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
                 .IsResolved()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
-            return {CreateAlterExternalTable(id, tx)};
+            return CreateReplaceExternalTable(id, tx, context);
         }
     }
 

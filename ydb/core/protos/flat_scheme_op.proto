@@ -1557,8 +1557,10 @@ message TModifyScheme {
     optional TPersQueueGroupDeallocate DeallocatePersQueueGroup = 57;
 
     optional TExternalTableDescription CreateExternalTable = 58;
+    optional TAlterExternalTable AlterExternalTable = 67;
 
     optional TExternalDataSourceDescription CreateExternalDataSource = 59;
+    optional TAlterExternalDataSource AlterExternalDataSource = 68;
 
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
@@ -1827,6 +1829,16 @@ message TExternalTableDescription {
     optional bool ReplaceIfExists = 9; // Only applicable for `create external table` operation
 }
 
+message TAlterExternalTable {
+    optional string Name = 1;
+    optional string SourceType = 2;
+    optional string DataSourcePath = 3;
+    optional string Location = 4;
+    repeated TColumnDescription AddColumns = 5;
+    repeated string DropColumns = 6;
+    optional bytes Content = 7;
+}
+
 // Access without authorization
 message TNoneAuth {
 }
@@ -1885,7 +1897,17 @@ message TExternalDataSourceDescription {
     optional string Installation = 6;
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
-    optional bool ReplaceIfExists = 9;
+    optional bool ReplaceIfExists = 9; // Only applicable for `create external data source` operation
+}
+
+message TAlterExternalDataSource {
+    optional string Name = 1;
+    optional string SourceType = 2;
+    optional string Location = 3;
+    optional string Installation = 4;
+    optional TAuth Auth = 5;
+    optional TExternalDataSourceProperties Properties = 6;
+    repeated string DropProperties = 7;
 }
 
 message TViewDescription {

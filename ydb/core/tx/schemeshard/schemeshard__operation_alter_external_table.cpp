@@ -409,12 +409,19 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterExternalTable>(std::move(id), tx);
+TVector<ISubOperation::TPtr> CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_UNUSED(context);
+    return {MakeSubOperation<TAlterExternalTable>(std::move(id), tx)};
 }
 
-ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state) {
+TVector<ISubOperation::TPtr> CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_UNUSED(context);
+    return {MakeSubOperation<TAlterExternalTable>(std::move(id), tx)};
+}
+
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state, bool needUpdateObject) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
+    Y_UNUSED(needUpdateObject);
     return MakeSubOperation<TAlterExternalTable>(std::move(id), state);
 }
 
