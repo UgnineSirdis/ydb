@@ -63,7 +63,7 @@ public:
     }
 };
 
-class TAlterExternalDataSourceBase : public TSubOperation {
+class TAlterExternalDataSourceBase: public TSubOperation {
 protected:
     static TTxState::ETxState NextState() { return TTxState::Propose; }
 
@@ -214,7 +214,7 @@ public:
     }
 };
 
-class TReplaceExternalDataSource : public TAlterExternalDataSourceBase {
+class TReplaceExternalDataSource: public TAlterExternalDataSourceBase {
 public:
     using TAlterExternalDataSourceBase::TAlterExternalDataSourceBase;
 
@@ -278,7 +278,7 @@ public:
     }
 };
 
-class TAlterExternalDataSource : public TAlterExternalDataSourceBase {
+class TAlterExternalDataSource: public TAlterExternalDataSourceBase {
 public:
     using TAlterExternalDataSourceBase::TAlterExternalDataSourceBase;
 
@@ -402,7 +402,7 @@ TVector<ISubOperation::TPtr> CreateAlterExternalDataSource(TOperationId id, cons
                                                  << tx.ShortDebugString());
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
-        return {CreateReject(id, status, TStringBuilder() << "Invalid TAlterExternalDataSource request: " << msg)};
+        return {CreateReject(std::move(id), status, TStringBuilder() << "Invalid TAlterExternalDataSource request: " << msg)};
     };
 
     if (!context.SS->EnableAlterExternalEntities) {
@@ -428,15 +428,15 @@ TVector<ISubOperation::TPtr> CreateAlterExternalDataSource(TOperationId id, cons
         .NotUnderDeleting()
         .IsExternalDataSource();
 
-    return {MakeSubOperation<TAlterExternalDataSource>(id, tx)};
+    return {MakeSubOperation<TAlterExternalDataSource>(std::move(id), tx)};
 }
 
 ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETxState state, bool needUpdateObject) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     if (needUpdateObject) {
-        return MakeSubOperation<TAlterExternalDataSource>(id, state);
+        return MakeSubOperation<TAlterExternalDataSource>(std::move(id), state);
     } else {
-        return MakeSubOperation<TReplaceExternalDataSource>(id, state);
+        return MakeSubOperation<TReplaceExternalDataSource>(std::move(id), state);
     }
 }
 

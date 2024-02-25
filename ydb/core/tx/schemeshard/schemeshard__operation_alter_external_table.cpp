@@ -96,8 +96,8 @@ public:
 };
 
 
-class TAlterExternalTable: public TSubOperation {
-private:
+class TAlterExternalTableBase: public TSubOperation {
+protected:
     bool IsSameDataSource = true;
     TPathId OldDataSourcePathId = InvalidPathId;
 
@@ -218,11 +218,13 @@ private:
 
     void CreateTransaction(const TOperationContext& context,
                            const TPathId& externalTablePathId,
-                           const TPathId& externalDataSourcePathId) const {
+                           const TPathId& externalDataSourcePathId,
+                           bool needUpdateObject = false) const {
         TTxState& txState = context.SS->CreateTx(OperationId,
                                                  TTxState::TxAlterExternalTable,
                                                  externalTablePathId,
                                                  externalDataSourcePathId);
+        txState.NeedUpdateObject = needUpdateObject;
         txState.Shards.clear();
     }
 
@@ -405,24 +407,68 @@ public:
     }
 };
 
+class TReplaceExternalTable: public TAlterExternalTableBase {
+public:
+    using TAlterExternalTableBase::TAlterExternalTableBase;
+};
+
+class TAlterExternalTable: public TAlterExternalTableBase {
+public:
+    using TAlterExternalTableBase::TAlterExternalTableBase;
+};
+
 }
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_UNUSED(context);
-    return {MakeSubOperation<TAlterExternalTable>(std::move(id), tx)};
+TVector<ISubOperation::TPtr> CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx) {
+    return {MakeSubOperation<TReplaceExternalTable>(std::move(id), tx)};
 }
 
 TVector<ISubOperation::TPtr> CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_UNUSED(context);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExternalTable);
+
+    LOG_I("CreateAlterExternalTable, opId " << id << ", feature flag EnableAlterExternalEntities "
+                                            << context.SS->EnableAlterExternalEntities << ", tx "
+                                            << tx.ShortDebugString());
+
+    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
+        return {CreateReject(id, status, TStringBuilder() << "Invalid TAlterExternalTable request: " << msg)};
+    };
+
+    if (!context.SS->EnableAlterExternalEntities) {
+        return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableAlterExternalEntities is off");
+    }
+
+    const auto& operation = tx.GetAlterExternalTable();
+    const TString& name = operation.GetName();
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+
+    {
+        const auto checks = NExternalTable::IsParentPathValid(parentPath);
+        if (!checks) {
+            return errorResult(checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    const TPath dstPath = parentPath.Child(name);
+    dstPath.Check()
+        .IsResolved()
+        .NotUnderDeleting()
+        .IsExternalTable();
+
     return {MakeSubOperation<TAlterExternalTable>(std::move(id), tx)};
 }
 
 ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state, bool needUpdateObject) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    Y_UNUSED(needUpdateObject);
-    return MakeSubOperation<TAlterExternalTable>(std::move(id), state);
+    if (needUpdateObject) {
+        return MakeSubOperation<TAlterExternalTable>(std::move(id), state);
+    } else {
+        return MakeSubOperation<TReplaceExternalTable>(std::move(id), state);
+    }
 }
 
 }

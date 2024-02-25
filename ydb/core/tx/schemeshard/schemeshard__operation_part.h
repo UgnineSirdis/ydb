@@ -372,7 +372,7 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state);
 // Alter
-TVector<ISubOperation::TPtr> CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx);
 TVector<ISubOperation::TPtr> CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state, bool needUpdateObject);
 // Drop
