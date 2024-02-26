@@ -315,7 +315,7 @@ public:
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
-        TPath dstPath     = parentPath.Child(name);
+        TPath dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
 
         const auto dataSourcePath =
