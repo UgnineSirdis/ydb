@@ -8,7 +8,7 @@ constexpr uint32_t MAX_FIELD_SIZE = 1000;
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 
 bool ValidateSourceType(const TString& sourceType, TString& errStr) {
-    // Only object storage supported today
+    // Only object storage is supported today
     if (sourceType != "ObjectStorage") {
         errStr = "Only ObjectStorage source type supported but got " + sourceType;
         return false;
