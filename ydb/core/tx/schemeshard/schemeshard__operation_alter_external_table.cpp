@@ -295,6 +295,24 @@ protected:
 public:
     using TSubOperation::TSubOperation;
 
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TAlterExternalTable AbortPropose"
+            << ": opId# " << OperationId);
+        Y_ABORT("no AbortPropose for TAlterExternalTable");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_N("TAlterExternalTable AbortUnsafe"
+            << ": opId# " << OperationId
+            << ", txId# " << forceDropTxId);
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
+class TReplaceExternalTable: public TAlterExternalTableBase {
+public:
+    using TAlterExternalTableBase::TAlterExternalTableBase;
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
         const auto ssId = context.SS->SelfTabletId();
@@ -303,7 +321,7 @@ public:
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
 
-        LOG_N("TAlterExternalTable Propose"
+        LOG_N("TReplaceExternalTable Propose"
             << ": opId# " << OperationId
             << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists:" << externalTableDescription.GetReplaceIfExists());
 
@@ -392,29 +410,124 @@ public:
         SetState(NextState());
         return result;
     }
-
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterExternalTable AbortPropose"
-            << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterExternalTable");
-    }
-
-    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterExternalTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << forceDropTxId);
-        context.OnComplete.DoneOperation(OperationId);
-    }
-};
-
-class TReplaceExternalTable: public TAlterExternalTableBase {
-public:
-    using TAlterExternalTableBase::TAlterExternalTableBase;
 };
 
 class TAlterExternalTable: public TAlterExternalTableBase {
 public:
     using TAlterExternalTableBase::TAlterExternalTableBase;
+
+    bool IsNewObjectValid(
+        const THolder<TProposeResponse>& result,
+        const TExternalDataSourceInfo::TPtr& externalDataSource,
+        const TExternalTableInfo::TPtr& externalTable)
+    {
+        const auto& alterCommand = Transaction.GetAlterExternalTable();
+        NKikimrSchemeOp::TExternalTableDescription desc;
+        // TODO: fill
+
+
+        return IsExternalTableDescriptionValid(result, externalDataSource->SourceType, desc);
+    }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+        Y_UNUSED(owner);
+        const auto ssId = context.SS->SelfTabletId();
+
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const auto& alterCommand = Transaction.GetAlterExternalTable();
+        const TString& name = alterCommand.GetName();
+
+        LOG_N("TAlterExternalTable Propose"
+            << ": opId# " << OperationId
+            << ", path# " << parentPathStr << "/" << name);
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+                                                   static_cast<ui64>(OperationId.GetTxId()),
+                                                   static_cast<ui64>(ssId));
+
+        const auto parentPath = TPath::Resolve(parentPathStr, context.SS);
+        RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
+
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+        TPath dstPath = parentPath.Child(name);
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+
+        const auto externalTableInfo =
+            context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
+        Y_ABORT_UNLESS(externalTableInfo);
+
+        const auto newDataSourcePath =
+            TPath::Resolve(alterCommand.HasDataSourcePath() ? alterCommand.GetDataSourcePath() : externalTableInfo->DataSourcePath, context.SS);
+        RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, newDataSourcePath));
+
+        const auto newExternalDataSource =
+            context.SS->ExternalDataSources.Value(newDataSourcePath->PathId, nullptr);
+        RETURN_RESULT_UNLESS(IsDataSourceValid(result, newExternalDataSource));
+
+        RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
+
+        RETURN_RESULT_UNLESS(IsNewObjectValid(result, newExternalDataSource, externalTableInfo));
+
+        TExternalDataSourceInfo::TPtr oldDataSource;
+        {
+            const auto oldDataSourcePath = TPath::Resolve(externalTableInfo->DataSourcePath, context.SS);
+            RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, oldDataSourcePath));
+
+            OldDataSourcePathId = oldDataSourcePath->PathId;
+            IsSameDataSource = oldDataSourcePath.PathString() == newDataSourcePath.PathString();
+            if (!IsSameDataSource) {
+                oldDataSource = context.SS->ExternalDataSources.Value(oldDataSourcePath->PathId, nullptr);
+                Y_ABORT_UNLESS(oldDataSource);
+            }
+        }
+
+
+        // TODO
+        /*
+        const auto oldExternalTableInfo =
+            context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
+        Y_ABORT_UNLESS(oldExternalTableInfo);
+        auto [externalTableInfo, maybeError] =
+            NExternalTable::CreateExternalTable(externalDataSource->SourceType,
+                                                externalTableDescription,
+                                                context.SS->ExternalSourceFactory,
+                                                oldExternalTableInfo->AlterVersion + 1);
+        if (maybeError) {
+            result->SetError(NKikimrScheme::StatusSchemeError, *maybeError);
+            return result;
+        }
+        Y_ABORT_UNLESS(externalTableInfo);
+
+        AddPathInSchemeShard(result, dstPath);
+
+        const auto externalTable = ReplaceExternalTablePathElement(dstPath);
+        CreateTransaction(context, externalTable->PathId, dataSourcePath->PathId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        RegisterParentPathDependencies(context, parentPath);
+        AdvanceTransactionStateToPropose(context, db);
+
+        LinkExternalDataSourceWithExternalTable(externalDataSource,
+                                                externalTable,
+                                                dstPath,
+                                                oldDataSource,
+                                                IsSameDataSource);
+
+        PersistExternalTable(context, db, externalTable, externalTableInfo,
+                             dataSourcePath->PathId, externalDataSource,
+                             OldDataSourcePathId, oldDataSource, acl,
+                             IsSameDataSource);
+
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
+                                                          dstPath,
+                                                          context.SS,
+                                                          context.OnComplete);
+
+        SetState(NextState());
+        */
+        return result;
+    }
 };
 
 }
