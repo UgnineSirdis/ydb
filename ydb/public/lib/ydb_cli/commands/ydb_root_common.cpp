@@ -62,6 +62,8 @@ void TClientCommandRootCommon::ValidateSettings() {
         Cerr << "Missing export to YT command usage flag in client settings" << Endl;
     } else if (!Settings.UseStaticCredentials.Defined()) {
         Cerr << "Missing static credentials usage flag in client settings" << Endl;
+    } else if (!Settings.UseOauth2TokenExchange.Defined()) {
+        Cerr << "Missing oauth 2.0 token exchange credentials usage flag in client settings" << Endl;
     } else if (!Settings.MentionUserAccount.Defined()) {
         Cerr << "Missing user account mentioning flag in client settings" << Endl;
     } else if (!Settings.YdbDir) {
@@ -76,6 +78,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOAuthToken = Settings.UseOAuthToken.GetRef();
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
+    config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     SetCredentialsGetter(config);
 }
@@ -90,6 +93,12 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         if (config.UseStaticCredentials) {
             if (config.StaticCredentials.User) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+            }
+        }
+
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2TokenExchangeParams) {
+                return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
             }
         }
 
@@ -272,7 +281,7 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, 
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
                                                       std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
         return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
@@ -525,7 +534,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     }
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
-        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
+        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not have \"method\" in it");
         return false;
     }
     TString authMethod = authValue["method"].as<TString>();

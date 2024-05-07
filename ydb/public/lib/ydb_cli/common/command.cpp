@@ -122,6 +122,19 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
     }
 }
 
+TOauth2TokenExchangeParams TClientCommand::TConfig::BuildOauth2TokenExchangeParams() const {
+    Y_ASSERT(Oauth2TokenExchangeParams);
+    TOauth2TokenExchangeParams params = *Oauth2TokenExchangeParams;
+    params.TokenEndpoint(IamEndpoint);
+    if (SubjectJwtTokenSourceParams) {
+        params.SubjectTokenSource(CreateJwtTokenSource(*SubjectJwtTokenSourceParams));
+    }
+    if (ActorJwtTokenSourceParams) {
+        params.ActorTokenSource(CreateJwtTokenSource(*ActorJwtTokenSourceParams));
+    }
+    return params;
+}
+
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
     int _argc = 1;
     int levels = 1;
