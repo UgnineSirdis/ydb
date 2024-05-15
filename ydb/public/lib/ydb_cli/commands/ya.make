@@ -36,6 +36,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     contrib/restricted/patched/replxx
+    contrib/libs/jwt-cpp
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre

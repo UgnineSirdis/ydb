@@ -78,6 +78,14 @@ private:
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
 
+    TMaybe<TOauth2TokenExchangeParams> Oauth2TokenExchangeParams;
+    TMaybe<TJwtTokenSourceParams> SubjectJwtTokenSourceParams;
+    TString SubjectJwtAlgorithm;
+    TString SubjectJwtPrivateKeyFile;
+    TMaybe<TJwtTokenSourceParams> ActorJwtTokenSourceParams;
+    TString ActorJwtAlgorithm;
+    TString ActorJwtPrivateKeyFile;
+
     bool IsAddressSet = false;
     bool IsDatabaseSet = false;
     bool IsIamEndpointSet = false;

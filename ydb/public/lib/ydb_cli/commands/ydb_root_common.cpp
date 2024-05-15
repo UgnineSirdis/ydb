@@ -23,6 +23,8 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
+#include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -105,6 +107,65 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         return CreateInsecureCredentialsProviderFactory();
     };
 }
+
+// Handler that creates maybe variable and assigns value to its member
+template <class T, class M>
+struct TMaybeParamHandler {
+    TMaybeParamHandler(TMaybe<T>* result, M T::* member)
+        : Result(result)
+        , Member(member)
+    {}
+
+    static void Set(TString& dst, TStringBuf val) {
+        dst = val;
+    }
+
+    static void Set(TDuration& dst, TStringBuf val) {
+        dst = TDuration::Parse(val);
+    }
+
+    static void Set(std::vector<TString>& dst, TStringBuf val) {
+        dst.emplace_back(val);
+        Cerr << "emplace back " << val << Endl;
+    }
+
+    void operator()(const NLastGetopt::TOptsParser* parser) {
+        if (!Result->Defined()) {
+            Result->ConstructInPlace();
+        }
+        Set(Result->GetRef().*Member, parser->CurValStr());
+    }
+
+    TMaybe<T>* Result;
+    M T::* Member;
+};
+
+template <class TAlg>
+void ApplyAsymmetricAlg(TJwtTokenSourceParams* params, const TString& privateKey) {
+    // Alg with first param as public key, second param as private key
+    params->SigningAlgorithm<TAlg>(std::string{}, privateKey);
+}
+
+template <class TAlg>
+void ApplyHmacAlg(TJwtTokenSourceParams* params, const TString& key) {
+    // Alg with first param as key
+    params->SigningAlgorithm<TAlg>(key);
+}
+
+const TMap<TString, void(*)(TJwtTokenSourceParams*, const TString& privateKey)> JwtAlgorithmsFactory = {
+    {"RS256", &ApplyAsymmetricAlg<jwt::algorithm::rs256>},
+    {"RS384", &ApplyAsymmetricAlg<jwt::algorithm::rs384>},
+    {"RS512", &ApplyAsymmetricAlg<jwt::algorithm::rs512>},
+    {"ES256", &ApplyAsymmetricAlg<jwt::algorithm::es256>},
+    {"ES384", &ApplyAsymmetricAlg<jwt::algorithm::es384>},
+    {"ES512", &ApplyAsymmetricAlg<jwt::algorithm::es512>},
+    {"PS256", &ApplyAsymmetricAlg<jwt::algorithm::ps256>},
+    {"PS384", &ApplyAsymmetricAlg<jwt::algorithm::ps384>},
+    {"PS512", &ApplyAsymmetricAlg<jwt::algorithm::ps512>},
+    {"HS256", &ApplyHmacAlg<jwt::algorithm::hs256>},
+    {"HS384", &ApplyHmacAlg<jwt::algorithm::hs384>},
+    {"HS512", &ApplyHmacAlg<jwt::algorithm::hs512>},
+};
 
 void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
@@ -220,7 +281,221 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
     }
 
-    if (config.UseIamAuth) {
+    if (config.UseOauth2TokenExchange) {
+        TOauth2TokenExchangeParams defaultParams;
+        TJwtTokenSourceParams defaultJwtParams;
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+        // Token exchange params
+        TStringBuilder grantTypeHelp;
+        grantTypeHelp << "OAuth 2.0 token exchange grant type parameter"
+            << " (default: " << colors.Cyan() << "\"" << defaultParams.GrantType_ << "\"" << colors.OldColor() << ")" << Endl
+            << "  Grant type search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_GRANT_TYPE\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-grant-type", grantTypeHelp).RequiredArgument("TYPE")
+            .Handler1(TMaybeParamHandler(&Oauth2TokenExchangeParams, &TOauth2TokenExchangeParams::GrantType_));
+
+        TStringBuilder resourceHelp;
+        resourceHelp << "OAuth 2.0 token exchange resource parameter" << Endl
+            << "  Resource search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_RESOURCE\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-resource", resourceHelp).RequiredArgument("RES")
+            .Handler1(TMaybeParamHandler(&Oauth2TokenExchangeParams, &TOauth2TokenExchangeParams::Resource_));
+
+        TStringBuilder audienceHelp;
+        audienceHelp << "OAuth 2.0 token exchange audience parameters" << Endl
+            << "This audience will be applied also to JWT tokens"
+            << "  Audience search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_AUDIENCE\" environment variable (if only one audience is needed)" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-audience", audienceHelp).RequiredArgument("AUD")
+            .Handler1(TMaybeParamHandler(&Oauth2TokenExchangeParams, &TOauth2TokenExchangeParams::Audience_));
+
+        TStringBuilder scopeHelp;
+        scopeHelp << "OAuth 2.0 token exchange scope parameters" << Endl
+            << "  Scope search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SCOPE\" environment variable (if only one scope is needed)" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-scope", scopeHelp).RequiredArgument("SCOPE")
+            .Handler1(TMaybeParamHandler(&Oauth2TokenExchangeParams, &TOauth2TokenExchangeParams::Scope_));
+
+        TStringBuilder requestedTokenTypeHelp;
+        requestedTokenTypeHelp << "OAuth 2.0 token exchange requested token type parameter"
+            << " (default: " << colors.Cyan() << "\"" << defaultParams.RequestedTokenType_ << "\"" << colors.OldColor() << ")" << Endl
+            << "  Requested token type search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_REQUESTED_TOKEN_TYPE\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-requested-token-type", requestedTokenTypeHelp).RequiredArgument("TYPE")
+            .Handler1(TMaybeParamHandler(&Oauth2TokenExchangeParams, &TOauth2TokenExchangeParams::RequestedTokenType_));
+
+        TStringBuilder supportedJwtAlgorithms;
+        for (const auto& [alg, _] : JwtAlgorithmsFactory) {
+            if (supportedJwtAlgorithms) {
+                supportedJwtAlgorithms << ", ";
+            }
+            supportedJwtAlgorithms << alg;
+        }
+
+        // Subject JWT token params
+        TStringBuilder subjectJwtAlgorithmHelp;
+        subjectJwtAlgorithmHelp << "OAuth 2.0 token exchange subject JWT algorithm" << Endl
+            << "  Algorithm search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_ALGORITHM\" environment variable" << Endl
+            << "    4. Active configuration profile" << Endl
+            << "  Supported algorithms: " << supportedJwtAlgorithms;
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-alg", subjectJwtAlgorithmHelp).RequiredArgument("ALG")
+            .StoreResult(&SubjectJwtAlgorithm);
+
+        TStringBuilder subjectJwtPrivateKeyFileHelp;
+        subjectJwtPrivateKeyFileHelp << "OAuth 2.0 token exchange subject JWT private key file" << Endl
+            << "  Private key file search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_PRIVATE_KEY_FILE\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-private-key-file", subjectJwtPrivateKeyFileHelp).RequiredArgument("PATH")
+            .StoreResult(&SubjectJwtPrivateKeyFile);
+
+        TStringBuilder subjectJwtKeyIdHelp;
+        subjectJwtKeyIdHelp << "OAuth 2.0 token exchange subject JWT key id" << Endl
+            << "  Key id search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_KEY_ID\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-key-id", subjectJwtKeyIdHelp).RequiredArgument("ID")
+            .Handler1(TMaybeParamHandler(&SubjectJwtTokenSourceParams, &TJwtTokenSourceParams::KeyId_));
+
+        TStringBuilder subjectJwtIssuerHelp;
+        subjectJwtIssuerHelp << "OAuth 2.0 token exchange subject JWT issuer claim" << Endl
+            << "  Issuer search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_ISSUER\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-issuer", subjectJwtIssuerHelp).RequiredArgument("ISS")
+            .Handler1(TMaybeParamHandler(&SubjectJwtTokenSourceParams, &TJwtTokenSourceParams::Issuer_));
+
+        TStringBuilder subjectJwtSubjectHelp;
+        subjectJwtSubjectHelp << "OAuth 2.0 token exchange subject JWT subject claim" << Endl
+            << "  Subject search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_SUBJECT\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-subject", subjectJwtSubjectHelp).RequiredArgument("SUBJECT")
+            .Handler1(TMaybeParamHandler(&SubjectJwtTokenSourceParams, &TJwtTokenSourceParams::Subject_));
+
+        TStringBuilder subjectJwtIdHelp;
+        subjectJwtIdHelp << "OAuth 2.0 token exchange subject JWT id claim" << Endl
+            << "  Id search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_ID\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-id", subjectJwtIdHelp).RequiredArgument("ID")
+            .Handler1(TMaybeParamHandler(&SubjectJwtTokenSourceParams, &TJwtTokenSourceParams::Id_));
+
+        TStringBuilder subjectJwtTokenTtlHelp;
+        subjectJwtTokenTtlHelp << "OAuth 2.0 token exchange subject JWT token TTL"
+            << " (default: " << colors.Cyan() << "\"" << defaultJwtParams.TokenTtl_ << "\"" << colors.OldColor() << ")" << Endl
+            << "  TTL search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_SUBJECT_JWT_TOKEN_TTL\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-subject-jwt-token-ttl", subjectJwtTokenTtlHelp).RequiredArgument("TTL")
+            .Handler1(TMaybeParamHandler(&SubjectJwtTokenSourceParams, &TJwtTokenSourceParams::TokenTtl_));
+
+        // Actor JWT token params
+        TStringBuilder actorJwtAlgorithmHelp;
+        actorJwtAlgorithmHelp << "OAuth 2.0 token exchange actor JWT algorithm" << Endl
+            << "  Algorithm search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_ALGORITHM\" environment variable" << Endl
+            << "    4. Active configuration profile" << Endl
+            << "  Supported algorithms: " << supportedJwtAlgorithms;
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-alg", actorJwtAlgorithmHelp).RequiredArgument("ALG")
+            .StoreResult(&ActorJwtAlgorithm);
+
+        TStringBuilder actorJwtPrivateKeyFileHelp;
+        actorJwtPrivateKeyFileHelp << "OAuth 2.0 token exchange actor JWT private key file" << Endl
+            << "  Private key file search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_PRIVATE_KEY_FILE\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-private-key-file", actorJwtPrivateKeyFileHelp).RequiredArgument("PATH")
+            .StoreResult(&ActorJwtPrivateKeyFile);
+
+        TStringBuilder actorJwtKeyIdHelp;
+        actorJwtKeyIdHelp << "OAuth 2.0 token exchange actor JWT key id" << Endl
+            << "  Key id search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_KEY_ID\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-key-id", actorJwtKeyIdHelp).RequiredArgument("ID")
+            .Handler1(TMaybeParamHandler(&ActorJwtTokenSourceParams, &TJwtTokenSourceParams::KeyId_));
+
+        TStringBuilder actorJwtIssuerHelp;
+        actorJwtIssuerHelp << "OAuth 2.0 token exchange actor JWT issuer claim" << Endl
+            << "  Issuer search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_ISSUER\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-issuer", actorJwtIssuerHelp).RequiredArgument("ISS")
+            .Handler1(TMaybeParamHandler(&ActorJwtTokenSourceParams, &TJwtTokenSourceParams::Issuer_));
+
+        TStringBuilder actorJwtSubjectHelp;
+        actorJwtSubjectHelp << "OAuth 2.0 token exchange actor JWT subject claim" << Endl
+            << "  Subject search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_SUBJECT\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-subject", actorJwtSubjectHelp).RequiredArgument("SUBJECT")
+            .Handler1(TMaybeParamHandler(&ActorJwtTokenSourceParams, &TJwtTokenSourceParams::Subject_));
+
+        TStringBuilder actorJwtIdHelp;
+        actorJwtIdHelp << "OAuth 2.0 token exchange actor JWT id claim" << Endl
+            << "  Id search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_ID\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-id", actorJwtIdHelp).RequiredArgument("ID")
+            .Handler1(TMaybeParamHandler(&ActorJwtTokenSourceParams, &TJwtTokenSourceParams::Id_));
+
+        TStringBuilder actorJwtTokenTtlHelp;
+        actorJwtTokenTtlHelp << "OAuth 2.0 token exchange actor JWT token TTL"
+            << " (default: " << colors.Cyan() << "\"" << defaultJwtParams.TokenTtl_ << "\"" << colors.OldColor() << ")" << Endl
+            << "  TTL search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE_ACTOR_JWT_TOKEN_TTL\" environment variable" << Endl
+            << "    4. Active configuration profile";
+        opts.AddLongOption("oauth2-token-exchange-actor-jwt-token-ttl", actorJwtTokenTtlHelp).RequiredArgument("TTL")
+            .Handler1(TMaybeParamHandler(&ActorJwtTokenSourceParams, &TJwtTokenSourceParams::TokenTtl_));
+    }
+
+    if (config.UseIamAuth || config.UseOauth2TokenExchange) {
         TStringBuilder iamEndpointHelp;
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         iamEndpointHelp << "Endpoint of IAM service (default: " << colors.Cyan();
