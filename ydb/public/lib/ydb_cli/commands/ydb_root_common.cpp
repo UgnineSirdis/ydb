@@ -722,6 +722,10 @@ void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
     auto getIamEndpoint = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
         if (!IsIamEndpointSet && (explicitOption || !Profile)) {
             config.IamEndpoint = param;
+            if (config.Oauth2TokenExchangeParams) {
+                config.Oauth2TokenExchangeParams->TokenEndpoint(config.IamEndpoint);
+                Oauth2TokenExchangeParams->TokenEndpoint(config.IamEndpoint);
+            }
             IsIamEndpointSet = true;
         }
         if (!IsVerbose()) {
@@ -1013,7 +1017,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     size_t explicitAuthMethodCount = (size_t)(config.ParseResult->Has("iam-token-file")) + (size_t)(config.ParseResult->Has("token-file"))
         + (size_t)(!YCTokenFile.empty())
         + (size_t)UseMetadataCredentials + (size_t)(!SaKeyFile.empty())
-        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword);
+        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword)
+        + (size_t)(Oauth2TokenExchangeParams.Defined() || SubjectJwtAlgorithm || ActorJwtAlgorithm);
 
     switch (explicitAuthMethodCount) {
     case 1:
@@ -1072,6 +1077,18 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 }
             }
             config.ChosenAuthMethod = "static-credentials";
+        } else if (Oauth2TokenExchangeParams.Defined() || SubjectJwtAlgorithm || ActorJwtAlgorithm) {
+            config.ChosenAuthMethod = "oauth2-token-exchange";
+            if (!Oauth2TokenExchangeParams.Defined()) {
+                Oauth2TokenExchangeParams.ConstructInPlace();
+            }
+            if (SubjectJwtAlgorithm && !SubjectJwtTokenSourceParams.Defined()) {
+                SubjectJwtTokenSourceParams.ConstructInPlace();
+            }
+            if (ActorJwtAlgorithm && !ActorJwtTokenSourceParams.Defined()) {
+                ActorJwtTokenSourceParams.ConstructInPlace();
+            }
+            Oauth2TokenExchangeParams->TokenEndpoint(IamEndpoint);
         }
         IsAuthSet = true;
         if (!IsVerbose()) {
@@ -1244,6 +1261,9 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
         }
         if (UseMetadataCredentials) {
             str << " UseMetadataCredentials (true)";
+        }
+        if (Oauth2TokenExchangeParams.Defined() || SubjectJwtAlgorithm || ActorJwtAlgorithm) {
+            str << " OAuth2TokenExchange (JWT)";
         }
 
         MisuseErrors.push_back(TStringBuilder() << str << ". Choose exactly one of them");
