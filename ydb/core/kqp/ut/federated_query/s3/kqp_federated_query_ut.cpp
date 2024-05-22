@@ -21,6 +21,27 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    Y_UNIT_TEST(ExecuteScriptSchemeQuery) {
+        const TString sql = R"(
+            create TABLE t1_with_uuid (
+                id uuid,
+                value utf8,
+                data Bytes,
+                PRIMARY key (value)
+            );
+            )";
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto db = kikimr->GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";

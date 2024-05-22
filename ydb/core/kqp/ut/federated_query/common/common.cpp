@@ -23,12 +23,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::optional<NKikimrConfig::TAppConfig> appConfig)
     {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableExternalDataSources(true);
-        featureFlags.SetEnableScriptExecutionOperations(true);
+        //featureFlags.SetEnableExternalDataSources(true);
+        //featureFlags.SetEnableScriptExecutionOperations(true);
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        //appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
