@@ -1,6 +1,7 @@
 RECURSE(
     blobsan
     cfg
+    dynnode_reg_dbg
     query_replay
     query_replay_yt
     simple_queue
