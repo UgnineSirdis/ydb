@@ -28,6 +28,19 @@ message ExportItemProgress {
     google.protobuf.Timestamp end_time = 4;
 }
 
+message EncryptionSettings {
+    enum Algorithm {
+        ALGORITHM_UNSPECIFIED = 0;
+        ALGORITHM_AES_128_GCM = 1;
+        ALGORITHM_AES_192_GCM = 2;
+        ALGORITHM_AES_256_GCM = 3;
+        ALGORITHM_CHACHA_POLY1305 = 4;
+    }
+
+    Algorithm algorithm = 1;
+    bytes key = 2;
+}
+
 /// YT
 message ExportToYtSettings {
     message Item {
@@ -120,6 +133,11 @@ message ExportToS3Settings {
     // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
+
+    // Settings how to encrypt data.
+    // If encryption_settings field is not specified,
+    // the resulting data will not be encrypted.
+    EncryptionSettings encryption_settings = 13;
 }
 
 message ExportToS3Result {
