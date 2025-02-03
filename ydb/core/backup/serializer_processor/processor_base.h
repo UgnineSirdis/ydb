@@ -1,25 +1,25 @@
 #pragma once
 #include <util/generic/yexception.h>
 
-#include "serializer.h"
+#include "processor.h"
 
 namespace NKikimr::NBackup {
 
-class TSerializerBase : public ISerializer {
+class TProcessorBase : public IProcessor {
 public:
-    TString Process(const TString& data) override {
+    TMaybe<TBuffer> Process(TBuffer&& data) override {
         Y_DEBUG_ABORT_UNLESS(!Finished);
         if (Finished) {
             ythrow yexception() << "Process call on finished stream";
         }
-        if (data.empty()) {
+        if (!data.size()) {
             ythrow yexception() << "Process call on empty data";
         }
 
-        return ProcessImpl(data);
+        return ProcessImpl(std::move(data));
     }
 
-    TString Finish() override {
+    TMaybe<TBuffer> Finish() override {
         Y_DEBUG_ABORT_UNLESS(!Finished);
         if (Finished) {
             ythrow yexception() << "Finish call on already finished stream";
@@ -29,8 +29,8 @@ public:
     }
 
 protected:
-    virtual TString ProcessImpl(const TString& data) = 0;
-    virtual TString FinishImpl() = 0;
+    virtual TMaybe<TBuffer> ProcessImpl(TBuffer&& data) = 0;
+    virtual TMaybe<TBuffer> FinishImpl() = 0;
 
 protected:
     bool Finished = false;

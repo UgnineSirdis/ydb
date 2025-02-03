@@ -2,5 +2,5 @@ RECURSE(
     common
     controller
     impl
-    serializer
+    serializer_processor
 )
