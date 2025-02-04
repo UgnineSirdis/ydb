@@ -19,10 +19,13 @@ struct IProcessor : public TSimpleRefCount<IProcessor> {
 
     virtual ~IProcessor() = default;
 
+    // Takes new data for processing.
+    virtual void Feed(TBuffer&& data) = 0;
+
     // Processes new data and returns current result part.
     // Current result part may be nothing.
     // Can throw error.
-    virtual TMaybe<TBuffer> Process(TBuffer&& data) = 0;
+    virtual TMaybe<TBuffer> Get() = 0;
 
     // Processes last part, finishes stream.
     // Can throw error.

@@ -3,37 +3,64 @@
 
 #include "processor.h"
 
+#include <deque>
+
 namespace NKikimr::NBackup {
 
 class TProcessorBase : public IProcessor {
 public:
-    TMaybe<TBuffer> Process(TBuffer&& data) override {
+    void Feed(TBuffer&& data) override final {
         Y_DEBUG_ABORT_UNLESS(!Finished);
         if (Finished) {
-            ythrow yexception() << "Process call on finished stream";
+            ythrow yexception() << "Feed finished stream";
         }
         if (!data.size()) {
-            ythrow yexception() << "Process call on empty data";
+            ythrow yexception() << "Feed empty data";
         }
 
-        return ProcessImpl(std::move(data));
+        FeedImpl(std::move(data));
     }
 
-    TMaybe<TBuffer> Finish() override {
+    TMaybe<TBuffer> Get() override final {
+        Y_DEBUG_ABORT_UNLESS(!Finished);
+        if (Finished) {
+            ythrow yexception() << "Get from finished stream";
+        }
+
+        return GetImpl();
+    }
+
+    TMaybe<TBuffer> Finish() override final {
         Y_DEBUG_ABORT_UNLESS(!Finished);
         if (Finished) {
             ythrow yexception() << "Finish call on already finished stream";
         }
 
+        Finished = true;
         return FinishImpl();
     }
 
 protected:
-    virtual TMaybe<TBuffer> ProcessImpl(TBuffer&& data) = 0;
+    virtual void FeedImpl(TBuffer&& data) {
+        InputData.emplace_front(std::move(data));
+    }
+
+    virtual TMaybe<TBuffer> GetImpl() = 0;
     virtual TMaybe<TBuffer> FinishImpl() = 0;
+
+    TMaybe<TBuffer>& NextData() {
+        CurrentData.Clear();
+        if (!InputData.empty()) {
+            CurrentData.ConstructInPlace(std::move(InputData.back()));
+            InputData.pop_back();
+        }
+        return CurrentData;
+    }
 
 protected:
     bool Finished = false;
+    std::deque<TBuffer> InputData;
+    TMaybe<TBuffer> CurrentData; // Current input data chunk
 };
 
 } // namespace NKikimr::NBackup

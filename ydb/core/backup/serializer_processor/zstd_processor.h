@@ -4,6 +4,6 @@
 namespace NKikimr::NBackup {
 
 IProcessor::TPtr CreateZstdCompressingProcessor(int compressionLevel);
-IProcessor::TPtr CreateZstdDecompressingProcessor();
+IProcessor::TPtr CreateZstdDecompressingProcessor(size_t bufferSize);
 
 } // namespace NKikimr::NBackup
