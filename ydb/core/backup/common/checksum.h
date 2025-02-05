@@ -1,12 +1,13 @@
 #pragma once
 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NBackup {
 
-class IChecksum {
+class IChecksum : public TSimpleRefCount<IChecksum> {
 public:
-    using TPtr = std::unique_ptr<IChecksum>;
+    using TPtr = TIntrusivePtr<IChecksum>;
 
     virtual ~IChecksum() = default;
 
@@ -14,7 +15,7 @@ public:
     virtual TString Serialize() = 0;
 };
 
-IChecksum* CreateChecksum();
+IChecksum::TPtr CreateChecksum();
 TString ComputeChecksum(TStringBuf data);
 TString ChecksumKey(const TString& objKey);
 

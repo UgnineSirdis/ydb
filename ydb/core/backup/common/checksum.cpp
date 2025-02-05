@@ -32,8 +32,8 @@ TString ComputeChecksum(TStringBuf data) {
     return checksum->Serialize();
 }
 
-IChecksum* CreateChecksum() {
-    return new TSHA256();
+IChecksum::TPtr CreateChecksum() {
+    return MakeIntrusive<TSHA256>();
 }
 
 TString ChecksumKey(const TString& objKey) {
