@@ -23,12 +23,24 @@ public:
     }
 
 protected:
+    void FeedImpl(TBuffer&& data) override {
+        ResetFeed = true;
+        Processors[0]->Feed(std::move(data));
+    }
+
     TMaybe<TBuffer> GetImpl() override {
-        return GetImpl(Processors.size() - 1);
+        if (ResetFeed) {
+            ResetFeed = false;
+            for (size_t i = 0; i < Processors.size() - 1; ++i) {
+                while (TMaybe<TBuffer> data = Processors[i]->Get()) {
+                    Processors[i + 1]->Feed(std::move(*data));
+                }
+            }
+        }
+        return Processors.back()->Get();
     }
 
     TMaybe<TBuffer> FinishImpl() override {
-        Y_DEBUG_ABORT_UNLESS(InputData.empty()); // All Get's were called
         for (size_t i = 0; i < Processors.size() - 1; ++i) {
             while (TMaybe<TBuffer> data = Processors[i]->Get()) {
                 Processors[i + 1]->Feed(std::move(*data));
@@ -45,7 +57,7 @@ protected:
                 result->Append(data->Data(), data->Size());
             }
         }
-        if (TMaybe<TBuffer> data = Processors.back()->Get()) {
+        if (TMaybe<TBuffer> data = Processors.back()->Finish()) {
             if (!result) {
                 result = std::move(data);
             } else {
@@ -55,29 +67,9 @@ protected:
         return result;
     }
 
-    TMaybe<TBuffer> GetImpl(size_t i) {
-        if (TMaybe<TBuffer> result = Processors[i]->Get()) {
-            return result;
-        }
-        if (i) {
-            if (TMaybe<TBuffer> prev = GetImpl(i - 1)) {
-                Processors[i]->Feed(std::move(*prev));
-            } else {
-                return Nothing();
-            }
-        } else {
-            if (NextData()) {
-                Processors[0]->Feed(std::move(*CurrentData));
-                CurrentData.Clear();
-            } else {
-                return Nothing();
-            }
-        }
-        return Processors[i]->Get();
-    }
-
 private:
     std::vector<IProcessor::TPtr> Processors;
+    bool ResetFeed = false;
 };
 
 IProcessor::TPtr CreateDummyProcessor() {

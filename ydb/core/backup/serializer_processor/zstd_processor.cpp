@@ -71,20 +71,24 @@ public:
         }
 
         result.Proceed(output.pos);
-        return res != 0;
+        return res == 0;
     }
 
     TMaybe<TBuffer> GetImpl() override {
         TMaybe<TBuffer> result;
-        if (!CheckInputData()) {
-            return result;
-        }
+        do {
+            if (!CheckInputData()) {
+                return Nothing();
+            }
 
-        result.ConstructInPlace();
-        result->Reserve(CurrentData->Size() - CurrentDataPos);
+            if (!result) {
+                result.ConstructInPlace();
+            }
+            result->Reserve(CurrentData->Size() - CurrentDataPos);
 
-        auto input = ZSTD_inBuffer{CurrentData->Data(), CurrentData->Size(), CurrentDataPos};
-        Compress(&input, ZSTD_e_continue, *result);
+            auto input = ZSTD_inBuffer{CurrentData->Data(), CurrentData->Size(), CurrentDataPos};
+            Compress(&input, ZSTD_e_continue, *result);
+        } while (!result->Size());
         return result;
     }
 
@@ -100,6 +104,9 @@ public:
 
         auto input = ZSTD_inBuffer{NULL, 0, 0};
         while (!Compress(&input, ZSTD_e_end, *result, true));
+        if (!result->Size()) {
+            result.Clear();
+        }
         return result;
     }
 
@@ -120,23 +127,27 @@ public:
 
     TMaybe<TBuffer> GetImpl() override {
         TMaybe<TBuffer> result;
-        if (!CheckInputData()) {
-            return result;
-        }
+        do {
+            if (!CheckInputData()) {
+                return Nothing();
+            }
 
-        result.ConstructInPlace();
-        result->Reserve(BufferSize);
+            if (!result) {
+                result.ConstructInPlace();
+                result->Reserve(BufferSize);
+            }
 
-        auto input = ZSTD_inBuffer{CurrentData->Data(), CurrentData->Size(), CurrentDataPos};
-        auto output = ZSTD_outBuffer{result->Data(), result->Capacity(), 0};
-        const size_t res = ZSTD_decompressStream(Context.Get(), &output, &input);
+            auto input = ZSTD_inBuffer{CurrentData->Data(), CurrentData->Size(), CurrentDataPos};
+            auto output = ZSTD_outBuffer{result->Data(), result->Capacity(), 0};
+            const size_t res = ZSTD_decompressStream(Context.Get(), &output, &input);
 
-        if (ZSTD_isError(res)) {
-            ythrow yexception() << ZSTD_getErrorName(res);
-        }
+            if (ZSTD_isError(res)) {
+                ythrow yexception() << ZSTD_getErrorName(res);
+            }
 
-        CurrentDataPos = input.pos;
-        result->Proceed(output.pos);
+            CurrentDataPos = input.pos;
+            result->Proceed(output.pos);
+        } while (!result->Size());
         return result;
     }
 
