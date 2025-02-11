@@ -112,7 +112,7 @@ public:
 
     virtual void ColumnsOrder(const TVector<ui32>& tags) = 0;
     virtual bool Collect(const NTable::IScan::TRow& row) = 0;
-    virtual IEventBase* PrepareEvent(bool last, TStats& stats) = 0;
+    virtual bool PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats, THolder<IEventBase>& ev) = 0;
     virtual void Clear() = 0;
     virtual bool IsFilled() const = 0;
     virtual TString GetError() const = 0;

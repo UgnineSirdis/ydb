@@ -91,21 +91,22 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
         }
 
         IBuffer::TStats stats;
-        THolder<IEventBase> ev{Buffer->PrepareEvent(noMoreData, stats)};
-
-        if (!ev) {
+        THolder<IEventBase> ev;
+        if (!Buffer->PrepareEvent(noMoreData, stats, ev)) {
             Success = false;
             Error = Buffer->GetError();
             return EScan::Final;
         }
 
-        Send(Uploader, std::move(ev));
-        State.Set(ES_BUFFER_SENT);
-        Stats->Aggr(stats);
+        if (ev) {
+            Send(Uploader, std::move(ev));
+            State.Set(ES_BUFFER_SENT);
+            Stats->Aggr(stats);
 
-        if (noMoreData) {
-            Spent->Alter(false);
-            return EScan::Sleep;
+            if (noMoreData) {
+                Spent->Alter(false);
+                return EScan::Sleep;
+            }
         }
 
         return EScan::Feed;

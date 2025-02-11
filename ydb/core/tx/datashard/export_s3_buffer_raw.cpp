@@ -3,6 +3,8 @@
 #include "export_s3_buffer_raw.h"
 #include "type_serialization.h"
 
+#include <ydb/core/backup/serializer_processor/processor.h>
+#include <ydb/core/backup/serializer_processor/checksum_processor.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -22,7 +24,23 @@ TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 byt
     , Rows(0)
     , BytesRead(0)
     , Checksum(enableChecksums ? NBackup::CreateChecksum() : nullptr)
+    , Processor(CreateProcessor())
 {
+}
+
+NBackup::IProcessor::TPtr TS3BufferRaw::CreateProcessor() {
+    std::vector<NBackup::IProcessor::TPtr> processors;
+    if (Checksum) {
+        processors.emplace_back(NBackup::CreateChecksumProcessor(Checksum));
+    }
+
+    if (processors.empty()) {
+        return NBackup::CreateDummyProcessor();
+    }
+    if (processors.size() == 1) {
+        return std::move(processors[0]);
+    }
+    return NBackup::CreateChainProcessor(std::move(processors));
 }
 
 void TS3BufferRaw::ColumnsOrder(const TVector<ui32>& tags) {
@@ -156,38 +174,55 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row) {
     TBufferOutput out(Buffer);
     ErrorString.clear();
 
-    size_t beforeSize = Buffer.Size();
     if (!Collect(row, out)) {
         return false;
     }
 
-    if (Checksum) {
-        TStringBuf data(Buffer.Data(), Buffer.Size());
-        Checksum->AddData(data.Tail(beforeSize));
-    }
     return true;
 }
 
-IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
-    stats.Rows = Rows;
-    stats.BytesRead = BytesRead;
+bool TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats, THolder<IEventBase>& ev) {
+    try {
+        stats.Rows = Rows;
+        stats.BytesRead = BytesRead;
 
-    auto buffer = Flush(true);
-    if (!buffer) {
-        return nullptr;
-    }
+        Rows = 0;
+        BytesRead = 0;
+        if (!Buffer.Empty()) {
+            Processor->Feed(std::move(Buffer));
+            Buffer = TBuffer();
+        }
 
-    stats.BytesSent = buffer->Size();
+        TBuffer outputBuffer;
+        while (auto buffer = Processor->Get()) {
+            outputBuffer.Append(buffer->Data(), buffer->Size());
+        }
+        if (last) {
+            if (auto buffer = Processor->Finish()) {
+                outputBuffer.Append(buffer->Data(), buffer->Size());
+            }
+        }
 
-    if (Checksum && last) {
-        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last, Checksum->Serialize());
-    } else {
-        return new TEvExportScan::TEvBuffer<TBuffer>(std::move(*buffer), last);
+        if (!outputBuffer.Empty()) {
+            stats.BytesSent = outputBuffer.Size();
+
+            if (Checksum && last) {
+                return new TEvExportScan::TEvBuffer<TBuffer>(std::move(outputBuffer), last, Checksum->Serialize());
+            } else {
+                return new TEvExportScan::TEvBuffer<TBuffer>(std::move(outputBuffer), last);
+            }
+        }
+        return true;
+    } catch (const std::exception& ex) {
+        ErrorString = ex.what();
+        return false;
     }
 }
 
 void TS3BufferRaw::Clear() {
-    Y_ABORT_UNLESS(Flush(false));
+    Rows = 0;
+    BytesRead = 0;
+    Buffer.Clear();
 }
 
 bool TS3BufferRaw::IsFilled() const {
@@ -196,12 +231,6 @@ bool TS3BufferRaw::IsFilled() const {
 
 TString TS3BufferRaw::GetError() const {
     return ErrorString;
-}
-
-TMaybe<TBuffer> TS3BufferRaw::Flush(bool) {
-    Rows = 0;
-    BytesRead = 0;
-    return std::exchange(Buffer, TBuffer());
 }
 
 NExportScan::IBuffer* CreateS3ExportBufferRaw(

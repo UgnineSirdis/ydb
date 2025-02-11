@@ -5,6 +5,7 @@
 #include "export_s3_buffer.h"
 
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/serializer_processor/processor.h>
 
 #include <util/generic/buffer.h>
 
@@ -20,7 +21,7 @@ public:
 
     void ColumnsOrder(const TVector<ui32>& tags) override;
     bool Collect(const NTable::IScan::TRow& row) override;
-    IEventBase* PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) override;
+    bool PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats, THolder<IEventBase>& ev) override;
     void Clear() override;
     bool IsFilled() const override;
     TString GetError() const override;
@@ -30,7 +31,7 @@ protected:
     inline ui64 GetBytesLimit() const { return BytesLimit; }
 
     bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
-    virtual TMaybe<TBuffer> Flush(bool prepare);
+    NBackup::IProcessor::TPtr CreateProcessor();
 
 private:
     const TTagToColumn Columns;
@@ -45,6 +46,7 @@ protected:
     TBuffer Buffer;
 
     NBackup::IChecksum::TPtr Checksum;
+    NBackup::IProcessor::TPtr Processor;
 
     TString ErrorString;
 }; // TS3BufferRaw
