@@ -1,10 +1,13 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "export_s3_buffer_raw.h"
+#include "export_s3_buffer.h"
 #include "type_serialization.h"
 
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/serializer_processor/processor.h>
 #include <ydb/core/backup/serializer_processor/processor.h>
 #include <ydb/core/backup/serializer_processor/checksum_processor.h>
+#include <ydb/core/backup/serializer_processor/zstd_processor.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -12,15 +15,61 @@
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/buffer.h>
 #include <util/stream/buffer.h>
+
 
 namespace NKikimr {
 namespace NDataShard {
 
-TS3Buffer::TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
+class TS3Buffer: public NExportScan::IBuffer {
+    using TTagToColumn = IExport::TTableColumns;
+    using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
+
+public:
+    explicit TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 maxBytes, ui64 minBytes, bool enableChecksums, int compressionLevel);
+    explicit TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums);
+
+    void ColumnsOrder(const TVector<ui32>& tags) override;
+    bool Collect(const NTable::IScan::TRow& row) override;
+    bool PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats, THolder<IEventBase>& ev) override;
+    void Clear() override;
+    bool IsFilled() const override;
+    TString GetError() const override;
+
+protected:
+    inline ui64 GetRowsLimit() const { return RowsLimit; }
+    inline ui64 GetBytesLimit() const { return BytesLimit; }
+
+    bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
+    NBackup::IProcessor::TPtr CreateProcessor();
+
+private:
+    const TTagToColumn Columns;
+    const ui64 RowsLimit;
+    const ui64 BytesLimit;
+    const ui64 MinBytes;
+    const int CompressionLevel;
+
+    TTagToIndex Indices;
+
+protected:
+    ui64 Rows;
+    ui64 BytesRead;
+    TBuffer Buffer;
+
+    NBackup::IChecksum::TPtr Checksum;
+    NBackup::IProcessor::TPtr Processor;
+
+    TString ErrorString;
+}; // TS3BufferRaw
+
+TS3Buffer::TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 maxBytes, ui64 minBytes, bool enableChecksums, int compressionLevel)
     : Columns(columns)
     , RowsLimit(rowsLimit)
-    , BytesLimit(bytesLimit)
+    , BytesLimit(maxBytes)
+    , MinBytes(minBytes)
+    , CompressionLevel(compressionLevel)
     , Rows(0)
     , BytesRead(0)
     , Checksum(enableChecksums ? NBackup::CreateChecksum() : nullptr)
@@ -28,10 +77,19 @@ TS3Buffer::TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimi
 {
 }
 
+TS3Buffer::TS3Buffer(const TTagToColumn& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
+    : TS3Buffer(columns, rowsLimit, bytesLimit, 0, enableChecksums, -1)
+{
+}
+
 NBackup::IProcessor::TPtr TS3Buffer::CreateProcessor() {
     std::vector<NBackup::IProcessor::TPtr> processors;
     if (Checksum) {
         processors.emplace_back(NBackup::CreateChecksumProcessor(Checksum));
+    }
+
+    if (CompressionLevel != -1) {
+        processors.emplace_back(NBackup::CreateZstdCompressingProcessor(CompressionLevel));
     }
 
     if (processors.empty()) {
@@ -226,6 +284,9 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
+    if (Buffer.Size() < MinBytes) {
+        return false;
+    }
     return Rows >= GetRowsLimit() || Buffer.Size() >= GetBytesLimit();
 }
 
@@ -237,6 +298,12 @@ NExportScan::IBuffer* CreateS3ExportBufferRaw(
         const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit, bool enableChecksums)
 {
     return new TS3Buffer(columns, rowsLimit, bytesLimit, enableChecksums);
+}
+
+NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
+        const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes, bool enableChecksums)
+{
+    return new TS3Buffer(columns, maxRows, maxBytes, minBytes, enableChecksums, compressionLevel);
 }
 
 } // NDataShard
