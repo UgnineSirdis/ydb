@@ -25,11 +25,11 @@ TClientCommand::TClientCommand(
         , Opts(NLastGetopt::TOpts::Default())
 {
     HideOption("svnrevision");
-    Opts.AddHelpOption('h');
+    Opts.GetOpts().AddHelpOption('h');
     ChangeOptionDescription("help", "Print usage, -hh for detailed help");
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
-    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
+    Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
 ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
@@ -120,7 +120,7 @@ std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSinglet
     return SingletonCredentialsProviderFactory;
 }
 
-TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
+std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(TConfig& config) {
     int _argc = 1;
     int levels = 1;
 
@@ -145,7 +145,17 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
         }
         ++_argc;
     }
-    Init(config.Opts, _argc, const_cast<const char**>(config.ArgV));
+    return std::pair(_argc, const_cast<const char**>(config.ArgV));
+}
+
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv)
+    : TOptionsParseResult(config.Opts_, argv.first, argv.second)
+{
+}
+
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config)
+    : TOptsParseOneLevelResult(config, GetArgv(config))
+{
 }
 
 void TClientCommand::CheckForExecutableOptions(TConfig& config) {
@@ -174,7 +184,7 @@ void TClientCommand::CheckForExecutableOptions(TConfig& config) {
 }
 
 void TClientCommand::Config(TConfig& config) {
-    config.Opts = &Opts;
+    config.Opts = &Opts.GetOpts();
     config.OnlyExplicitProfile = OnlyExplicitProfile;
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -204,12 +214,14 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts_, config.ArgC, (const char**)config.ArgV);
 }
 
 void TClientCommand::Prepare(TConfig& config) {
     config.ArgsSettings = TConfig::TArgSettings();
-    config.Opts = &Opts;
+    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    config.Opts_ = &Opts;
+    config.Opts = &Opts.GetOpts();
     Config(config);
     CheckForExecutableOptions(config);
     config.CheckParamsCount();
@@ -221,6 +233,10 @@ void TClientCommand::Prepare(TConfig& config) {
 
 void TClientCommand::ExtractParams(TConfig& config) {
     Y_UNUSED(config);
+
+    // Parse options from env.
+    // Parsing from profiles is only supported at high level commands.
+    ParseResult->ParseFromProfilesAndEnv(nullptr, nullptr);
 }
 
 bool TClientCommand::Prompt(TConfig& config) {
@@ -229,7 +245,9 @@ bool TClientCommand::Prompt(TConfig& config) {
 }
 
 int TClientCommand::ValidateAndRun(TConfig& config) {
-    config.Opts = &Opts;
+    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    config.Opts_ = &Opts;
+    config.Opts = &Opts.GetOpts();
     config.ParseResult = ParseResult.get();
     ExtractParams(config);
     Validate(config);
@@ -264,14 +282,14 @@ void TClientCommand::SetCustomUsage(TConfig& config) {
 }
 
 void TClientCommand::HideOption(const TString& name) {
-    NLastGetopt::TOpt* opt = Opts.FindLongOption(name);
+    NLastGetopt::TOpt* opt = Opts.GetOpts().FindLongOption(name);
     if (opt) {
         opt->Hidden_ = true;
     }
 }
 
 void TClientCommand::ChangeOptionDescription(const TString& name, const TString& description) {
-    NLastGetopt::TOpt* opt = Opts.FindLongOption(name);
+    NLastGetopt::TOpt* opt = Opts.GetOpts().FindLongOption(name);
     if (opt) {
         opt->Help_ = description;
     }
@@ -279,7 +297,7 @@ void TClientCommand::ChangeOptionDescription(const TString& name, const TString&
 
 void TClientCommand::SetFreeArgTitle(size_t pos, const TString& title, const TString& help) {
     Args[pos] = title;
-    Opts.SetFreeArgTitle(pos, title, help);
+    Opts.GetOpts().SetFreeArgTitle(pos, title, help);
 }
 
 void TClientCommand::RenderCommandDescription(
@@ -421,7 +439,7 @@ int TClientCommandTree::Run(TConfig& config) {
 
 void TClientCommandTree::Prepare(TConfig& config) {
     TClientCommand::Prepare(config);
-    config.ParentCommands.push_back({ Name, HasOptionsToShow() ? &Opts : nullptr });
+    config.ParentCommands.push_back({ Name, HasOptionsToShow() ? &Opts.GetOpts() : nullptr });
 
     if (SelectedCommand) {
         SelectedCommand->Prepare(config);
@@ -433,7 +451,7 @@ void TClientCommandTree::SetFreeArgs(TConfig& config) {
 }
 
 bool TClientCommandTree::HasOptionsToShow() {
-    for (auto opt : Opts.Opts_) {
+    for (auto opt : Opts.GetOpts().Opts_) {
         if (!NeedToHideOption(opt.Get())) {
             return true;
         }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "client_command_options.h"
 
 #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -34,7 +35,7 @@ public:
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
-    NLastGetopt::TOpts Opts;
+    TClientCommandOptions Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
@@ -97,8 +98,9 @@ public:
         char** ArgV;
         int InitialArgC;
         char** InitialArgV;
+        TClientCommandOptions* Opts_ = nullptr;
         NLastGetopt::TOpts* Opts;
-        const NLastGetopt::TOptsParseResult* ParseResult;
+        const TOptionsParseResult* ParseResult;
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
@@ -326,7 +328,10 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TOptsParseOneLevelResult : public TOptionsParseResult {
+        TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv);
+
+        static std::pair<int, const char**> GetArgv(TConfig& config);
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };
@@ -379,7 +384,7 @@ protected:
     virtual void SetCustomUsage(TConfig& config);
 
 protected:
-    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
+    std::shared_ptr<TOptionsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);

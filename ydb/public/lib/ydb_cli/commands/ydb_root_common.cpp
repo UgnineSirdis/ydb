@@ -122,12 +122,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
     TStringBuilder endpointHelp;
     endpointHelp << "Endpoint to connect. Protocols: grpc, grpcs (Default: "
-        << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ")." << Endl;
-
-    endpointHelp << "  Endpoint search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. Profile specified with --profile option" << Endl
-        << "    3. Active configuration profile";
+        << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ").";
     TStringBuilder databaseHelp;
     databaseHelp << "Database to work with." << Endl
         << "  Database search order:" << Endl
@@ -135,8 +130,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "    2. Profile specified with --profile option" << Endl
         << "    3. Active configuration profile";
 
-    opts.AddLongOption('e', "endpoint", endpointHelp)
-        .RequiredArgument("[PROTOCOL://]HOST[:PORT]").StoreResult(&Address);
+    config.Opts_->AddLongOption('e', "endpoint", endpointHelp)
+        .RequiredArgument("[PROTOCOL://]HOST[:PORT]").StoreResult(&Address)
+        .ProfileParam("endpoint");
     opts.AddLongOption('d', "database", databaseHelp)
         .RequiredArgument("PATH").StoreResult(&Database);
     opts.AddLongOption('v', "verbose", "Increase verbosity of operations")
