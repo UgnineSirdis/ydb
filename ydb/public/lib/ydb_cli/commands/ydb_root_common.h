@@ -36,7 +36,6 @@ public:
     void Config(TConfig& config) override;
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
-    void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
     void Validate(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -49,12 +48,13 @@ private:
     bool GetCredentialsFromProfile(std::shared_ptr<IProfile> profile, TConfig& config, bool explicitOption);
 
     void ParseProfile();
+    void ParseAddress(TConfig&) override {}
     void ParseDatabase(TConfig& config);
     void ParseIamEndpoint(TConfig& config);
     void ParseCaCerts(TConfig& config) override;
     void ParseClientCert(TConfig& config) override;
-    void GetAddressFromString(TConfig& config, TString* result = nullptr);
-    bool ParseProtocolNoConfig(TString& message);
+    static TString GetAddressFromString(const TString& address, bool* enableSsl = nullptr, std::vector<TString>* errors = nullptr);
+    static bool ParseProtocolNoConfig(TString& address, bool* enableSsl, TString& message);
     void GetCaCerts(TConfig& config);
     void GetClientCert(TConfig& config);
     bool TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,

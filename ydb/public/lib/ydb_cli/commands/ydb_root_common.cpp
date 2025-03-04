@@ -130,9 +130,18 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "    2. Profile specified with --profile option" << Endl
         << "    3. Active configuration profile";
 
+    EnableSsl = Settings.EnableSsl.GetRef(); // default
     config.Opts_->AddLongOption('e', "endpoint", endpointHelp)
-        .RequiredArgument("[PROTOCOL://]HOST[:PORT]").StoreResult(&Address)
-        .ProfileParam("endpoint");
+        .RequiredArgument("[PROTOCOL://]HOST[:PORT]")
+        .ProfileParam("endpoint")
+        .Handler([this](const TString& value) {
+            Address = GetAddressFromString(value, &EnableSsl);
+        })
+        .Validator([](const TString& value) {
+            std::vector<TString> errors;
+            GetAddressFromString(value, nullptr, &errors);
+            return errors;
+        });
     opts.AddLongOption('d', "database", databaseHelp)
         .RequiredArgument("PATH").StoreResult(&Database);
     opts.AddLongOption('v', "verbose", "Increase verbosity of operations")
@@ -346,8 +355,23 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
+    ParseResult->ParseFromProfilesAndEnv(Profile, ProfileManager->GetActiveProfile());
+    if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
+        MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
+    }
+    if (IsVerbose()) {
+        std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {
+            config.ConnectionParams[paramName].push_back({value, sourceText});
+        });
+        if (!errors.empty()) {
+            MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
+        }
+    }
+
+    config.Address = Address;
+    config.EnableSsl = EnableSsl;
+
     ParseDatabase(config);
-    ParseAddress(config);
     ParseCaCerts(config);
     ParseClientCert(config);
     ParseIamEndpoint(config);
@@ -501,81 +525,49 @@ void TClientCommandRootCommon::GetClientCert(TConfig& config) {
     std::tie(config.ClientCert, config.ClientCertPrivateKey) = ConvertCertToPEM(config.ClientCert, config.ClientCertPrivateKey, config.ClientCertPrivateKeyPassword);
 }
 
-void TClientCommandRootCommon::ParseAddress(TConfig& config) {
-    auto getAddress = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
-        TString address;
-        if (!IsAddressSet && (explicitOption || !Profile)) {
-            config.Address = param;
-            IsAddressSet = true;
-            GetAddressFromString(config);
-            address = config.Address;
+TString TClientCommandRootCommon::GetAddressFromString(const TString& address_, bool* enableSsl, std::vector<TString>* errors) {
+    TString port = "2135";
+    TString address = address_;
+    TString message;
+    if (!ParseProtocolNoConfig(address, enableSsl, message)) {
+        if (errors) {
+            errors->emplace_back(std::move(message));
         }
-        if (!IsVerbose()) {
-            return true;
+        return {};
+    }
+
+    const size_t colonPos = address.find(":");
+    if (colonPos == TString::npos) {
+        address = address + ':' + port;
+    } else {
+        if (colonPos != address.rfind(":")) {
+            if (errors) {
+                errors->emplace_back("Wrong format for option 'endpoint': more than one colon found.");
+            }
+            return {};
         }
-        if (!address) {
-            address = param;
-            GetAddressFromString(config, &address);
-        }
-        config.ConnectionParams["endpoint"].push_back({address, sourceText});
-        return false;
-    };
-    // Priority 1. Explicit --endpoint option
-    if (Address && getAddress(Address, "explicit --endpoint option", true)) {
-        return;
     }
-    // Priority 2. Explicit --profile option
-    if (TryGetParamFromProfile("endpoint", Profile, true, getAddress)) {
-        return;
-    }
-    // Priority 3. Active profile (if --profile option is not specified)
-    if (!config.OnlyExplicitProfile && TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
-        return;
-    }
+    return address;
 }
 
-void TClientCommandRootCommon::GetAddressFromString(TConfig& config, TString* result) {
-    TString port = "2135";
-    Address = result ? *result : config.Address;
-    if (!Address.empty()) {
-        if (!result) {
-            config.EnableSsl = Settings.EnableSsl.GetRef();
-        }
-        TString message;
-        if ((result && !ParseProtocolNoConfig(message)) || (!result && !ParseProtocol(config, message))) {
-            MisuseErrors.push_back(message);
-        }
-        auto colon_pos = Address.find(":");
-        if (colon_pos == TString::npos) {
-            if (result) {
-                *result = Address + ":" + port;
-            } else {
-                config.Address =  Address + ":" + port;
+bool TClientCommandRootCommon::ParseProtocolNoConfig(TString& address, bool* enableSsl, TString& message) {
+    auto separatorPos = address.find("://");
+    if (separatorPos != TString::npos) {
+        TString protocol = address.substr(0, separatorPos);
+        protocol.to_lower();
+        if (protocol == "grpcs") {
+            if (enableSsl) {
+                *enableSsl = true;
+            }
+        } else if (protocol == "grpc") {
+            if (enableSsl) {
+                *enableSsl = false;
             }
         } else {
-            if (colon_pos == Address.rfind(":")) {
-                if (result) {
-                    *result = Address;
-                } else {
-                    config.Address =  Address;
-                }
-            } else {
-                MisuseErrors.push_back("Wrong format for option 'endpoint': more than one colon found.");
-            }
-        }
-    }
-}
-
-bool TClientCommandRootCommon::ParseProtocolNoConfig(TString& message) {
-    auto separator_pos = Address.find("://");
-    if (separator_pos != TString::npos) {
-        TString protocol = Address.substr(0, separator_pos);
-        protocol.to_lower();
-        if (protocol != "grpcs" && protocol != "grpc") {
             message = TStringBuilder() << "Unknown protocol \"" << protocol << "\".";
             return false;
         }
-        Address = Address.substr(separator_pos + 3);
+        address = address.substr(separatorPos + 3);
     }
     return true;
 }
