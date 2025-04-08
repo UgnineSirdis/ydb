@@ -89,6 +89,8 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
+    FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
 };
 
 class TExportToS3Response : public TOperation {
