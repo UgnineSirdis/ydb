@@ -72,18 +72,8 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
 
             // Forget
             for (auto& backupOp : parallelBackups) {
-                constexpr bool isProgressStatusFixed = false; // TODO: delete this code when https://github.com/ydb-platform/ydb/issues/17460 is fixed
-                if constexpr (isProgressStatusFixed) {
-                    auto forgetResult = YdbOperationClient().Forget(backupOp.GetValueSync().Id()).GetValueSync();
-                    UNIT_ASSERT_C(forgetResult.IsSuccess(), forgetResult.GetIssues().ToString());
-                } else {
-                    TAsyncStatus forgetResult = YdbOperationClient().Forget(backupOp.GetValueSync().Id());
-                    while (!forgetResult.GetValueSync().IsSuccess() && forgetResult.GetValueSync().GetIssues().ToString().contains("Export operation is in progress")) {
-                        Sleep(TDuration::MilliSeconds(100));
-                        forgetResult = YdbOperationClient().Forget(backupOp.GetValueSync().Id());
-                    }
-                    UNIT_ASSERT_C(forgetResult.GetValueSync().IsSuccess(), forgetResult.GetValueSync().GetIssues().ToString());
-                }
+                auto forgetResult = YdbOperationClient().Forget(backupOp.GetValueSync().Id()).GetValueSync();
+                UNIT_ASSERT_C(forgetResult.IsSuccess(), forgetResult.GetIssues().ToString());
             }
         }
 
