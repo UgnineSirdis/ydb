@@ -191,8 +191,7 @@ protected:
         return l;
     }
 
-    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const TString& exportPrefix) {
-        NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings(exportPrefix);
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
         auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
 
@@ -203,6 +202,10 @@ protected:
         }
 
         UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const TString& exportPrefix) {
+        ValidateListObjectInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
     }
 
 protected:
