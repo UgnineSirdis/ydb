@@ -278,6 +278,12 @@ void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuild
     info.Shards.clear();
 }
 
+void TSchemeShard::PersistBuildIndexValidationInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TIndexValidationShardStatus& shardStatus) {
+    db.Table<Schema::IndexValidationShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
+        NIceDb::TUpdate<Schema::IndexValidationShardStatus::Status>(shardStatus.Status)
+    );
+}
+
 void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ASSERT(info.IsBuildVectorIndex());
     for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {

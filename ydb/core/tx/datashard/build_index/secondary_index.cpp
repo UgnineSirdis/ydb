@@ -539,7 +539,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
         response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -640,6 +640,101 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvBuildIndexProgressResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TBuildIndexScan");
     }
+}
+
+class TValidateUniqueIndexScan: public NTable::IScan {
+public:
+    TValidateUniqueIndexScan(ui64 buildIndexId, TProtoColumnsCRef targetIndexColumns)
+        : BuildIndexId(buildIndexId)
+    {
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        Y_UNUSED(targetIndexColumns);
+        Y_UNUSED(BuildIndexId);
+        ////////////////////////////////////////////////////////////////////////////////////////////
+    }
+
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
+        Driver = driver;
+        Scheme = std::move(scheme);
+        return {EScan::Feed, {}};
+    }
+
+    EScan Seek(TLead& lead, ui64 seek) override {
+        lead.To(Scheme->Tags(), {}, NTable::ESeek::Lower);
+        Cerr << "=== Scan seek " << seek << Endl;
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
+        Cerr << "=== Scan feed\n";
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        Y_UNUSED(row);
+        ////////////////////////////////////////////////////////////////////////////////////////////
+
+        return EScan::Feed;
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        Cerr << "=== Scan finish with status " << int(status)  << Endl;
+        return this;
+    }
+
+    void Describe(IOutputStream&) const override {
+    }
+
+private:
+    const ui64 BuildIndexId;
+    const TString TargetTable;
+    const TScanRecord::TSeqNo SeqNo;
+
+    const TActorId ProgressActorId;
+
+    TIntrusiveConstPtr<TScheme> Scheme;
+    IDriver* Driver = nullptr;
+};
+
+TAutoPtr<NTable::IScan> CreateValidateUniqueIndexScan(ui64 buildIndexId, TProtoColumnsCRef targetIndexColumns) {
+    return new TValidateUniqueIndexScan(buildIndexId, targetIndexColumns);
+}
+
+class TDataShard::TTxHandleSafeValidateUniqueIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleSafeValidateUniqueIndexScan(TDataShard* self, TEvDataShard::TEvValidateUniqueIndexRequest::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev)) {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+        Self->HandleSafe(Ev, ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+        // nothing
+    }
+
+private:
+    TEvDataShard::TEvValidateUniqueIndexRequest::TPtr Ev;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext&) {
+    Execute(new TTxHandleSafeValidateUniqueIndexScan(this, std::move(ev)));
+}
+
+void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext&) {
+    auto& request = ev->Get()->Record;
+    const auto tableId = TTableId(request.GetOwnerId(), request.GetPathId());
+    const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+
+    const ui64 id = request.GetId();
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
+    THolder<NTable::IScan> scan{CreateValidateUniqueIndexScan(id, request.GetIndexColumns())};
+
+    TScanOptions scanOpts;
+    scanOpts.SetResourceBroker("build_index", 10);
+
+    const ui64 scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
+    GetScanManager().Set(id, seqNo).push_back(scanId);
 }
 
 }

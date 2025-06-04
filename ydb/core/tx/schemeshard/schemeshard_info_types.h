@@ -3070,6 +3070,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
+        Validating = 41, // Validating index constraints after filling
         DropBuild = 45,
         CreateBuild = 46,
         LockBuild = 47,
@@ -3409,10 +3410,44 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
     };
 
+    struct TIndexValidationShardStatus {
+        TPathId IndexImplPathId;
+        NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
+        TMaybe<NKikimrSchemeOp::TIndexValidationShardResult> Result;
+
+        explicit TIndexValidationShardStatus(const TPathId& indexImplPathId)
+            : IndexImplPathId(indexImplPathId)
+        {}
+
+        TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
+            TStringBuilder result;
+
+            result << "TIndexValidationShardStatus {";
+
+            if (shardIdx) {
+                result << " ShardIdx: " << shardIdx;
+            }
+            result << " Status: " << NKikimrIndexBuilder::EBuildStatus_Name(Status);
+            if (Result) {
+                result << " Result: " << Result->ShortDebugString();
+            }
+
+            result << " }";
+
+            return result;
+        }
+    };
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
+
+    TMap<TShardIdx, TIndexValidationShardStatus> IndexShards;
+    TDeque<TShardIdx> ToValidateIndexShards;
+    THashSet<TShardIdx> InProgressIndexShards;
+    std::vector<TShardIdx> DoneIndexShards;
+
     ui32 MaxInProgressShards = 32;
 
     TBillingStats Processed;
