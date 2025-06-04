@@ -4565,12 +4565,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
                         << " " << TypeName(exc) << ": " << exc.what() << Endl
                         << TBackTrace::FromCurrentException().PrintToString()
                         << ", TIndexBuildInfo: " << buildInfo);
-        
+
                     // in-memory volatile state:
                     buildInfo.IsBroken = true;
                     buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
@@ -4581,7 +4581,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }
@@ -4731,6 +4731,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
                     fillBuildInfoByIdSafe(id, "IndexBuildShardStatus", [&](TIndexBuildInfo& buildInfo) {
                         buildInfo.AddShardStatus(rowset);
+                    });
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            // read index validation results
+            {
+                auto rowset = db.Table<Schema::IndexValidationShardStatus>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::IndexValidationShardStatus::Id>();
+                    fillBuildInfoByIdSafe(id, "IndexValidationShardStatus", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddIndexValidationShardStatus(rowset);
                     });
 
                     if (!rowset.Next()) {

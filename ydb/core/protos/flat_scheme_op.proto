@@ -2235,3 +2235,8 @@ message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
 }
+
+message TIndexValidationShardResult {
+    optional bytes FirstIndexKey = 1; // absent if no data in shard
+    optional bytes LastIndexKey = 2; // absent if no data in shard
+}

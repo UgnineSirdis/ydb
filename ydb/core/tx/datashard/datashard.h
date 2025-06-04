@@ -352,6 +352,10 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        // Is sent to unique index shards
+        EvValidateUniqueIndexRequest,
+        EvValidateUniqueIndexResponse,
+
         EvEnd
     };
 
@@ -1837,6 +1841,20 @@ namespace TEvDataShard {
                           EvInMemoryStateResponse>
     {
         TEvInMemoryStateResponse() = default;
+    };
+
+    struct TEvValidateUniqueIndexRequest
+        : public TEventPB<TEvValidateUniqueIndexRequest,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexRequest,
+                          TEvDataShard::EvValidateUniqueIndexRequest>
+    {
+    };
+
+    struct TEvValidateUniqueIndexResponse
+        : public TEventPB<TEvValidateUniqueIndexResponse,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
+                          TEvDataShard::EvValidateUniqueIndexResponse>
+    {
     };
 };
 

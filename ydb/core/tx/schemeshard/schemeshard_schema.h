@@ -1537,6 +1537,30 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathOwnerId, PathLocalId, DataColumnId, DataColumnName>;
     };
 
+    struct IndexValidationShardStatus : Table<120> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct OwnerShardIdx : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct Status : Column<4, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
+        struct Result : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TIndexValidationShardResult; };
+        struct Message : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        struct ReadRowsProcessed : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<8, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            Id,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status,
+            Result,
+            Message,
+            ReadRowsProcessed,
+            ReadBytesProcessed
+        >;
+    };
+
     struct RestoreTasks : Table<82> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -2162,7 +2186,8 @@ struct Schema : NIceDb::Schema {
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
-        SysView
+        SysView,
+        IndexValidationShardStatus
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
