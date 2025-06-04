@@ -3464,6 +3464,56 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         BuildingUniqIndexDeniesTableModifications(true);
     }
 
+    Y_UNIT_TEST(BuildingUniqIndexSuccess) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    TableKey1 Uint64,
+                    TableKey2 String,
+                    IndexKey1 String,
+                    IndexKey2 Int64,
+                    TableDataColumn String,
+                    IndexDataColumn String,
+                    PRIMARY KEY (TableKey1, TableKey2)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString createQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey1, TableKey2, IndexKey1, IndexKey2, TableDataColumn, IndexDataColumn)
+                    VALUES
+                        (1, "1", "index_1", 1, "table_data1", "index_data1"),
+                        (2, "2", "index_2", 2, "table_data2", "index_data2"),
+                        (3, "3", "index_3", 3, "table_data3", "index_data3");
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString alterQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey1, IndexKey2) COVER (IndexDataColumn);
+            )sql";
+            auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported index type to build");
+        }
+    }
+
     Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);

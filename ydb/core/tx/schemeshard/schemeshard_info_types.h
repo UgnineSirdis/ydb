@@ -3070,6 +3070,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
+        Validating = 41, // Validating index constraints after filling
         DropBuild = 45,
         CreateBuild = 46,
         LockBuild = 47,
@@ -3192,7 +3193,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Level = " << Level << " / " << Levels
                 << ", K = " << K
@@ -3410,10 +3411,46 @@ public:
         }
     };
 
+    struct TIndexValidationShardStatus {
+        TPathId IndexImplPathId;
+        NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
+        ui64 SeqNoRound = 0;
+        TMaybe<NKikimrSchemeOp::TIndexValidationShardResult> Result;
+
+        explicit TIndexValidationShardStatus(const TPathId& indexImplPathId)
+            : IndexImplPathId(indexImplPathId)
+        {}
+
+        TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
+            TStringBuilder result;
+
+            result << "TIndexValidationShardStatus {";
+
+            if (shardIdx) {
+                result << " ShardIdx: " << shardIdx;
+            }
+            result << " Status: " << NKikimrIndexBuilder::EBuildStatus_Name(Status);
+            result << " SeqNoRound: " << SeqNoRound;
+            if (Result) {
+                result << " Result: " << Result->ShortDebugString();
+            }
+
+            result << " }";
+
+            return result;
+        }
+    };
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
+
+    TMap<TShardIdx, TIndexValidationShardStatus> IndexShards;
+    TDeque<TShardIdx> ToValidateIndexShards;
+    THashSet<TShardIdx> InProgressIndexShards;
+    std::vector<TShardIdx> DoneIndexShards;
+
     ui32 MaxInProgressShards = 32;
 
     TBillingStats Processed;
@@ -3447,7 +3484,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3570,7 +3607,7 @@ public:
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
-        
+
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 
