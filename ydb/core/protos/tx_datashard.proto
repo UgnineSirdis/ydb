@@ -2349,3 +2349,45 @@ message TEvForceDataCleanupResult {
     optional uint64 TabletId = 2;
     optional EStatus Status = 3;
 }
+
+message TEvValidateUniqueIndexRequest {
+    optional uint64 Id = 1;          // unique id of build index process
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    optional string TargetName = 5;
+    repeated string IndexColumns = 6;          // key columns that is needed to transfer in terms of target table
+
+    optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
+
+    optional uint64 SnapshotTxId = 8;
+    optional uint64 SnapshotStep = 9;
+
+    optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part
+    optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+}
+
+message TEvValidateUniqueIndexProgressResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 5;
+
+    optional Ydb.StatusIds.StatusCode ValidationStatus = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional bytes LastKeyAck = 9;
+
+    optional uint64 RowsDelta = 10;
+    optional uint64 BytesDelta = 11;
+
+    optional uint64 RequestSeqNoGeneration = 12;
+    optional uint64 RequestSeqNoRound = 13;
+}

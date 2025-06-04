@@ -2235,3 +2235,6 @@ message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
 }
+
+message TIndexValidationShardResult {
+}
