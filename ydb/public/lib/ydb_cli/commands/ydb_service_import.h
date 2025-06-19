@@ -41,6 +41,12 @@ private:
     bool UseVirtualAddressing = true;
     bool NoACL = false;
     bool SkipChecksumValidation = false;
+    TString CommonSourcePrefix;
+    TString CommonDestinationPath;
+
+    // Encryption params
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

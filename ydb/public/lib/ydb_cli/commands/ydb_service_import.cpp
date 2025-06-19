@@ -12,6 +12,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/stream/format.h> // for SF_BYTES
+#include <util/string/hex.h>
 
 #if defined(_win32_)
 #include <io.h>
@@ -102,11 +103,24 @@ void TCommandImportFromS3::Config(TConfig& config) {
             << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
+    config.Opts->AddLongOption("source-prefix", "TODO")
+        .RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
+
+    config.Opts->AddLongOption("destination-path", "TODO")
+        .RequiredArgument("PATH").StoreResult(&CommonDestinationPath);
+
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
         .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
 
     config.Opts->AddLongOption("skip-checksum-validation", "Skip checksum validation during import")
         .RequiredArgument("BOOL").StoreTrue(&SkipChecksumValidation).DefaultValue("false");
+
+    config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
+        .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
+        .Env("YDB_ENCRYPTION_KEY", false)
+        .FileName("encryption key file").RequiredArgument("PATH")
+        .StoreFilePath(&EncryptionKeyFile)
+        .StoreResult(&EncryptionKey);
 
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
@@ -122,8 +136,8 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     ParseAwsSecretKey(config, "secret-key");
 
     Items = TItem::Parse(config, "item");
-    if (Items.empty()) {
-        throw TMisuseException() << "At least one item should be provided";
+    if (Items.empty() && !CommonSourcePrefix) {
+        throw TMisuseException() << "No source prefix was provided";
     }
 
 }
@@ -141,6 +155,22 @@ bool IsSupportedObject(TStringBuf& key) {
 }
 
 int TCommandImportFromS3::Run(TConfig& config) {
+    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+        try {
+            EncryptionKey = HexDecode(EncryptionKey);
+        } catch (const std::exception&) {
+            // Don't print error, it may contain secret.
+            Cerr << "Failed to decode encryption key from hex" << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    const bool encryption = !EncryptionKey.empty();
+    if (encryption && !CommonSourcePrefix) {
+        Cerr << "--source-prefix parameter is required" << Endl;
+        return EXIT_FAILURE;
+    }
+
     using namespace NImport;
 
     TImportFromS3Settings settings = FillSettings(TImportFromS3Settings());
@@ -159,6 +189,20 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.NumberOfRetries(NumberOfRetries);
     settings.NoACL(NoACL);
     settings.SkipChecksumValidation(SkipChecksumValidation);
+
+    if (CommonSourcePrefix) {
+        settings.SourcePrefix(CommonSourcePrefix);
+    }
+
+    if (CommonDestinationPath) {
+        settings.DestinationPath(CommonDestinationPath);
+    }
+
+    if (encryption) {
+        settings.SymmetricKey(EncryptionKey);
+    }
+
+
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
