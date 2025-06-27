@@ -4820,6 +4820,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
             }
+
+            // read index validation results
+            {
+                auto rowset = db.Table<Schema::IndexValidationShardStatus>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::IndexValidationShardStatus::Id>();
+                    fillBuildInfoByIdSafe(id, "IndexValidationShardStatus", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddIndexValidationShardStatus(rowset);
+                    });
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
         }
 
         // Read snapshot tables
