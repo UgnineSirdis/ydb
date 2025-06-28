@@ -1343,7 +1343,7 @@ private:
                 if (prevLastKey) {
                     TSerializedCellVec currentFirstKey(firstKey);
                     Y_ENSURE(currentFirstKey.GetCells().size() == indexColumnTypeInfos.size());
-                    if (CompareTypedCellVectors(currentFirstKey.GetCells().data(), prevLastKey->GetCells().data(), indexColumnTypeInfos.data(), indexColumnTypeInfos.size()) == 0) {
+                    if (TypedCellVectorsEqualWithNullSemantics(currentFirstKey.GetCells().data(), prevLastKey->GetCells().data(), indexColumnTypeInfos.data(), indexColumnTypeInfos.size()) == ETriBool::True) {
                         TStringBuilder err;
                         err << "Duplicate key found: (";
                         for (size_t i = 0; i < buildInfo.IndexColumns.size(); ++i) {
