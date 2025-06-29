@@ -3384,7 +3384,8 @@ public:
         TString DebugMessage;
         ui64 SeqNoRound = 0;
         NKikimrSchemeOp::TIndexValidationShardResult Result;
-        TBillingStats Processed;
+
+        TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
 
         TIndexValidationShardStatus() = default;
 
@@ -3401,7 +3402,7 @@ public:
             result << " Result: " << Result.ShortDebugString();
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
-            result << " Processed: " << Processed.ToString();
+            result << " Processed: " << Processed.ShortDebugString();
 
             result << " }";
 
@@ -3787,13 +3788,9 @@ public:
         shardStatus.DebugMessage = row.template GetValueOrDefault<
             Schema::IndexValidationShardStatus::Message>();
 
-        auto& processed = shardStatus.Processed;
-        processed = {
-            0 /*uploadRows*/,
-            0 /*uploadBytes*/,
-            row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadBytesProcessed>(0),
-        };
+        shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadRowsProcessed>(0));
+        shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexValidationShardStatus::ReadBytesProcessed>(0));
+        Processed += shardStatus.Processed;
     }
 
     bool IsCancellationRequested() const {

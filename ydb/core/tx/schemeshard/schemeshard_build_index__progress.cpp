@@ -2263,9 +2263,10 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        auto billingStats = GetBillingStats();
-        shardStatus.Processed += billingStats;
-        buildInfo.Processed += billingStats;
+        auto stats = GetMeteringStats();
+        shardStatus.Processed += stats;
+        buildInfo.Processed += stats;
+
         Self->PersistBuildIndexProcessed(db, buildInfo);
 
         NYql::TIssues issues;
@@ -2296,9 +2297,8 @@ public:
         return true;
     }
 
-    TBillingStats GetBillingStats() const {
-        auto& record = Response->Get()->Record;
-        return {0 /*uploadRows*/, 0 /*uploadBytes*/, record.GetReadRows(), record.GetReadBytes()};
+    TMeteringStats GetMeteringStats() const {
+        return Response->Get()->Record.GetMeteringStats();
     }
 };
 
