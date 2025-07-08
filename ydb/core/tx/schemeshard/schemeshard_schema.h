@@ -1592,7 +1592,7 @@ struct Schema : NIceDb::Schema {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct OwnerShardIdx : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct Status : Column<4, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
+        struct Status : Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrIndexBuilder::EBuildStatus; };
         struct Result : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TIndexValidationShardResult; };
         struct Message : Column<6, NScheme::NTypeIds::Utf8> {};
 

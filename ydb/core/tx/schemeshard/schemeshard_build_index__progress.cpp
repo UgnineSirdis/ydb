@@ -900,9 +900,9 @@ private:
     }
 
     void AddIndexShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildInfo::TIndexValidationShardStatus& status) {
-        if (status.Status == Ydb::StatusIds::SUCCESS) {
+        if (status.Status == NKikimrIndexBuilder::EBuildStatus::DONE) {
             buildInfo.DoneIndexShards.emplace_back(idx);
-        } else if (status.Status == Ydb::StatusIds::ABORTED || status.Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+        } else if (status.Status == NKikimrIndexBuilder::EBuildStatus::ABORTED || status.Status == NKikimrIndexBuilder::EBuildStatus::INVALID) {
             buildInfo.ToValidateIndexShards.emplace_back(idx);
         } else {
             Y_ENSURE(false, "Unreachable");
@@ -1338,7 +1338,7 @@ private:
         std::optional<TSerializedCellVec> prevLastKey;
         for (TIndexShardsType::const_iterator it : sortedIndexShards) {
             const TIndexBuildInfo::TIndexValidationShardStatus& status = it->second;
-            Y_ENSURE(status.Status == Ydb::StatusIds::SUCCESS);
+            Y_ENSURE(status.Status == NKikimrIndexBuilder::EBuildStatus::DONE);
             if (const TString& firstKey = status.Result.GetFirstIndexKey()) {
                 if (prevLastKey) {
                     TSerializedCellVec currentFirstKey(firstKey);
@@ -2290,11 +2290,11 @@ public:
         bool erased = buildInfo.InProgressIndexShards.erase(shardIdx);
         Y_ENSURE(erased);
 
-        if (shardStatus.Status == Ydb::StatusIds::SUCCESS) {
+        if (shardStatus.Status == NKikimrIndexBuilder::EBuildStatus::DONE) {
             buildInfo.DoneIndexShards.emplace_back(shardIdx);
             OnIndexShardSuccess(db, buildInfo, shardStatus);
 
-        } else if (shardStatus.Status == Ydb::StatusIds::ABORTED) {
+        } else if (shardStatus.Status == NKikimrIndexBuilder::EBuildStatus::ABORTED) {
             // datashard gracefully rebooted, reschedule shard
             buildInfo.ToValidateIndexShards.emplace_front(shardIdx);
         } else {

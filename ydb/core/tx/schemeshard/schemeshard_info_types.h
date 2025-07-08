@@ -3249,7 +3249,7 @@ public:
     };
 
     struct TIndexValidationShardStatus {
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
         TString DebugMessage;
         ui64 SeqNoRound = 0;
         NKikimrSchemeOp::TIndexValidationShardResult Result;
@@ -3266,7 +3266,7 @@ public:
             if (shardIdx) {
                 result << " ShardIdx: " << shardIdx;
             }
-            result << " Status: " << Ydb::StatusIds::StatusCode_Name(Status);
+            result << " Status: " << NKikimrIndexBuilder::EBuildStatus_Name(Status);
             result << " SeqNoRound: " << SeqNoRound;
             result << " Result: " << Result.ShortDebugString();
             result << " DebugMessage: " << DebugMessage;
