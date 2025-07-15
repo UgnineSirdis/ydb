@@ -345,9 +345,9 @@ enum class TRateLimiterMode : ui8 {
 #define RLSWITCH(mode) \
     IsRlAllowed() ? mode : TRateLimiterMode::Off
 
-enum class TAuditMode : bool {
-    Off = false,
-    Auditable = true,
+struct TAuditModeFlags {
+    static constexpr ui64 DmlAudit = 1;
+    static constexpr ui64 Default = 0;
 };
 
 class ICheckerIface;
@@ -363,7 +363,7 @@ public:
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
-    TAuditMode AuditMode = TAuditMode::Off;
+    ui64 AuditModeFlags = TAuditModeFlags::Default;
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
 
@@ -429,7 +429,7 @@ public:
     virtual void Pass(const IFacilityProvider& facility) = 0;
 
     // audit
-    virtual bool IsAuditable() const {
+    virtual bool IsDmlAuditable() const {
         return false;
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
@@ -786,8 +786,8 @@ public:
         };
     }
 
-    bool IsAuditable() const override {
-        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
+    bool IsDmlAuditable() const override {
+        return (AuxSettings.AuditModeFlags & TAuditModeFlags::DmlAudit) != 0 && !this->IsInternalCall();
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -1494,8 +1494,8 @@ public:
 
     // IRequestCtxBaseMtSafe
     //
-    bool IsAuditable() const override {
-        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
+    bool IsDmlAuditable() const override {
+        return (AuxSettings.AuditModeFlags & TAuditModeFlags::DmlAudit) != 0 && !this->IsInternalCall();
     }
 
 private:

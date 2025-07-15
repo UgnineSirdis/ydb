@@ -459,10 +459,10 @@ private:
 
     bool IsAuditEnabledFor(const TString& userSID) const {
         return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
-    };
+    }
 
     void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID, const TString& sanitizedToken) const {
-        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
+        const bool dmlAuditEnabled = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
