@@ -346,8 +346,16 @@ enum class TRateLimiterMode : ui8 {
     IsRlAllowed() ? mode : TRateLimiterMode::Off
 
 struct TAuditModeFlags {
-    static constexpr ui64 DmlAudit = 1;
-    static constexpr ui64 Default = 0;
+    static constexpr ui64 DmlAudit = 1;               // Current request is included in DML audit logging mode.
+
+    static constexpr ui64 DatabaseApi = 2;            // Set of APIs supporting actions over the database schema objects inside a tenant database, designed for usage in the database applications.
+                                                      // This definition excludes APIs over technical objects assigned to the database, like for instance tablets.
+
+    static constexpr ui64 ClusterApi = 4;             // Any API (both gRPC and http, public and private) outside the database API.
+
+    static constexpr ui64 ModifyingOrCriticalApi = 8;
+
+    static constexpr ui64 Default = DatabaseApi;
 };
 
 class ICheckerIface;
