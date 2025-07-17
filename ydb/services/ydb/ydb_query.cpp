@@ -56,15 +56,15 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }  \
     }
 
-    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
-    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
+    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
+    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
     ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS);
     ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION);
     ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION);
     ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION);
-    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION);
-    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION);
-    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION);
+    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
+    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
+    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
 
 #undef ADD_REQUEST
 }

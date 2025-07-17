@@ -25,14 +25,14 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST_NEW(NAME, CB) \
-     MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>>   \
-         (this, &Service_, CQ_,                                                                                   \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                             \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));            \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                           \
-                    new TGrpcRequestOperationCall<Monitoring::NAME##Request, Monitoring::NAME##Response>          \
-                         (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Off, nullptr}));                        \
-            }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                            \
+     MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>>         \
+         (this, &Service_, CQ_,                                                                                         \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));                  \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                                 \
+                    new TGrpcRequestOperationCall<Monitoring::NAME##Request, Monitoring::NAME##Response>                \
+                         (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Off, nullptr, TAuditModeFlags::ClusterApi})); \
+            }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                                  \
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
     ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest);

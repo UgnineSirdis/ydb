@@ -46,7 +46,7 @@ void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             }, &Ydb::Auth::V1::AuthService::AsyncService::Request ## NAME,                                 \
             #NAME, logger, getCounterBlock("login", #NAME))->Run();
 
-    ADD_REQUEST_LIMIT(Login, DoLoginRequest, TRateLimiterMode::Off, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit)
+    ADD_REQUEST_LIMIT(Login, DoLoginRequest, TRateLimiterMode::Off, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi)
 
 #undef ADD_REQUEST_LIMIT
 

@@ -45,9 +45,9 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     }                                                                                                                   \
 } while(0)
 
-    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
-    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
-    ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps);
+    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
+    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, TAuditModeFlags::DatabaseApi | TAuditModeFlags::DmlAudit | TAuditModeFlags::ModifyingOrCriticalApi);
+    ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps, TAuditModeFlags::DatabaseApi | TAuditModeFlags::ModifyingOrCriticalApi);
 
 #undef ADD_REQUEST_LIMIT
 }

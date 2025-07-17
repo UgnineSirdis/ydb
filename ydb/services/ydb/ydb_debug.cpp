@@ -60,6 +60,7 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         new TGrpcRequestNoOperationCall<IN, OUT> \
                             (ctx, &CB, TRequestAuxSettings { \
                                 .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
+                                .AuditModeFlags = TAuditModeFlags::ClusterApi, \
                                 .RequestType = NJaegerTracing::ERequestType::PING_##REQUEST_TYPE, \
                             })); \
                 }, &Ydb::Debug::V1::DebugService::AsyncService::Request ## NAME, \
