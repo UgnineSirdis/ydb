@@ -1,4 +1,5 @@
 RECURSE(
+    bulk_upsert_csv
     canondata_sync
     datastreams_helpers
     fq_runner
