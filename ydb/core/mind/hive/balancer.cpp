@@ -243,7 +243,7 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             for (TTabletInfo* tablet : nodeTablets) {
-                if (tablet->IsGoodForBalancer(now) && 
+                if (tablet->IsGoodForBalancer(now) &&
                     (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
                     tablet->HasMetric(Settings.ResourceToBalance)) {
                     tablet->UpdateWeight();
@@ -329,7 +329,7 @@ protected:
                            << " from node " << tablet->Node->Id
                            << " to node " << node->Id);
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
-                    Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
+                    Hive->ExecuteRestartTablet(tablet->GetFullTabletId(), node->Id);
                     UpdateProgress();
                 }
             }

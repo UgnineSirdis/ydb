@@ -66,5 +66,9 @@ ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId, TNodeId preferr
     return new TTxRestartTablet(tabletId, preferredNodeId, this);
 }
 
+void THive::ExecuteRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId) {
+    Execute(CreateRestartTablet(tabletId, preferredNodeId));
+}
+
 } // NHive
 } // NKikimr

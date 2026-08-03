@@ -77,5 +77,9 @@ ITransaction* THive::CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& 
     return new TTxUpdateTabletMetrics(ev, this);
 }
 
+void THive::ExecuteUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr event) {
+    Execute(CreateUpdateTabletMetrics(event));
+}
+
 } // NHive
 } // NKikimr

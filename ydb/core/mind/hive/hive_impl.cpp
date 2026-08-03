@@ -787,7 +787,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
         if (UpdateTabletMetricsInProgress > (MAX_UPDATE_TABLET_METRICS_IN_PROGRESS / 2)) {
             BLOG_W("THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " transactions in progress is over 50% of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS");
         }
-        Execute(CreateUpdateTabletMetrics(ev));
+        ExecuteUpdateTabletMetrics(ev);
     } else {
         BLOG_ERROR("THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " was skipped due to reaching of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS");
         Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);

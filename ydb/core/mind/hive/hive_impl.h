@@ -315,6 +315,9 @@ protected:
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateProcessTabletMetrics();
 
+    virtual void ExecuteRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
+    virtual void ExecuteUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr event);
+
 public:
     TDomainsView DomainsView;
 
