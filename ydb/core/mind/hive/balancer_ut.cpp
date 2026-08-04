@@ -1,9 +1,14 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/future.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <util/random/fast.h>
 #include <util/stream/null.h>
+#include <exception>
+#include <functional>
 #include <numeric>
+#include <type_traits>
+#include <utility>
 #include "hive_impl.h"
 #include "balancer.h"
 
@@ -202,11 +207,9 @@ public:
     }
 
     NKikimrConfig::THiveConfig GetHiveConfig() {
-        NKikimrConfig::THiveConfig config;
-        RunInHive([&] {
-            config = Hive->CurrentConfig;
+        return RunInHive([&] {
+            return Hive->CurrentConfig;
         });
-        return config;
     }
 
     TNodeId AddNode(ui32 nodeIndex, ui64 maxCpu) {
@@ -366,10 +369,38 @@ public:
         return sqrt(varianceSum / values.size());
     }
 
-    void RunInHive(std::function<void()> callback) {
-        Runtime.Send(new IEventHandle(HiveActor, Edge, new TEvHiveBalancerTest::TEvRunCallback(std::move(callback))), 0, true);
+    template <typename TCallback>
+    auto RunInHive(TCallback&& callback) -> std::decay_t<std::invoke_result_t<std::decay_t<TCallback>&>> {
+        using TStoredCallback = std::decay_t<TCallback>;
+        using TResult = std::decay_t<std::invoke_result_t<TStoredCallback&>>;
+
+        auto promise = NThreading::NewPromise<TResult>();
+        auto future = promise.GetFuture();
+        auto hiveCallback = [
+            callback = TStoredCallback(std::forward<TCallback>(callback)),
+            promise = std::move(promise)
+        ]() mutable {
+            try {
+                if constexpr (std::is_void_v<TResult>) {
+                    std::invoke(callback);
+                    promise.SetValue();
+                } else {
+                    promise.SetValue(std::invoke(callback));
+                }
+            } catch (...) {
+                promise.SetException(std::current_exception());
+            }
+        };
+
+        Runtime.Send(new IEventHandle(HiveActor, Edge, new TEvHiveBalancerTest::TEvRunCallback(std::move(hiveCallback))), 0, true);
         TAutoPtr<IEventHandle> handle;
         Runtime.GrabEdgeEventRethrow<TEvHiveBalancerTest::TEvRunCallbackResult>(handle);
+
+        if constexpr (std::is_void_v<TResult>) {
+            future.GetValue();
+        } else {
+            return future.ExtractValue();
+        }
     }
 
     TTestHive* GetHive() {
