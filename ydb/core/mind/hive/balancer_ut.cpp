@@ -43,9 +43,8 @@ public:
         Become(&TTestHive::StateTest);
     }
 
-    template <typename F>
-    void UpdateConfig(F func) {
-        func(ClusterConfig);
+    void UpdateConfig(const NKikimrConfig::THiveConfig& config) {
+        ClusterConfig = config;
         BuildCurrentConfig();
     }
 
@@ -196,9 +195,9 @@ public:
         Runtime.AdvanceCurrentTime(TDuration::Hours(1));
     }
 
-    void UpdateConfig(std::function<void(NKikimrConfig::THiveConfig&)> func) {
-        RunInHive([this, func = std::move(func)] {
-            Hive->UpdateConfig(func);
+    void UpdateConfig(const NKikimrConfig::THiveConfig& config) {
+        RunInHive([this, &config] {
+            Hive->UpdateConfig(config);
         });
     }
 
@@ -415,11 +414,9 @@ Y_UNIT_TEST_SUITE(THiveBalancerTest) {
         env.SetNodeCpuTotalMultiplier(NODE_TOTAL_CPU_MULTIPLIER);
 
         NKikimrConfig::THiveConfig hiveConfig = env.GetHiveConfig();
-        hiveConfig.SetTabletKickCooldownPeriod(10);
+        hiveConfig.SetTabletKickCooldownPeriod(60);
         hiveConfig.SetMaxMovementsOnAutoBalancer(3);
-        env.UpdateConfig([&](NKikimrConfig::THiveConfig& cfg) {
-            cfg = hiveConfig;
-        });
+        env.UpdateConfig(hiveConfig);
 
         const TDuration balancerPeriod = TDuration::Seconds(hiveConfig.GetMinPeriodBetweenBalance());
         const double minScatterToBalance = hiveConfig.GetMinCPUScatterToBalance();
