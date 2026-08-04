@@ -173,7 +173,7 @@ protected:
     }
 };
 
-// Models an environment for THive's balancer: a hive with a set of alive nodes and running
+// Models an environment for Hive's balancer: a hive with a set of alive nodes and running
 // tablets, where the real THiveBalancer actor is triggered and paced by the standard hive
 // machinery (TEvProcessTabletBalancer scheduling), tablet moves are mocked in memory, and
 // tablet/node metrics are delivered through the standard TEvTabletMetrics handler
@@ -421,7 +421,7 @@ private:
     std::vector<TNodeId> NodeIds;
     std::unordered_map<TNodeId, ui64> NodeMaxCpu;
     std::unordered_map<TTabletId, ui64> TabletCpu;
-    double NodeCpuTotalMultiplier = 1.0;
+    double NodeCpuTotalMultiplier = 1.2;
 };
 
 } // namespace
