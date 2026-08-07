@@ -2516,7 +2516,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 balancerType = EBalancerType::Scatter;
                 break;
         }
-        BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
+        BLOG_D("Scatter " << stats.ScatterByResource << " over limit "
                    << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
         StartHiveBalancer({
             .Type = balancerType,
