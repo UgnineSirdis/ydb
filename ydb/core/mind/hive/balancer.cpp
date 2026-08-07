@@ -115,17 +115,32 @@ void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEI
 
 class THiveBalancer : public NActors::TActorBootstrapped<THiveBalancer>, public ISubActor {
 protected:
+    struct TWorkStats {
+        const TInstant StartTime = TActivationContext::Now();
+        int Movements = 0;
+        size_t NodesVisited = 0;
+        size_t TabletsVisited = 0;
+
+        void Output(IOutputStream& outputStream) const {
+            outputStream
+                << "Moves: " << Movements
+                << ". Nodes visited: " << NodesVisited
+                << ". Tablets visited: " << TabletsVisited
+                << ". Work time: " << (TActivationContext::Now() - StartTime);
+        }
+    };
+
     constexpr static TDuration TIMEOUT = TDuration::Minutes(10);
     THive* Hive;
     using TTabletId = TFullTabletId;
     ui64 KickInFlight;
-    int Movements;
     TBalancerSettings Settings;
     TBalancerStats& Stats;
     std::vector<TNodeId> Nodes;
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    TWorkStats WorkStats;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -134,13 +149,13 @@ protected:
     }
 
     void PassAway() override {
-        BLOG_I("Balancer finished with " << Movements << " movements made");
+        BLOG_I("Balancer " << EBalancerTypeName(Settings.Type) << " finished. " << WorkStats);
         Stats.TotalRuns++;
-        Stats.TotalMovements += Movements;
-        Stats.LastRunMovements = Movements;
+        Stats.TotalMovements += WorkStats.Movements;
+        Stats.LastRunMovements = WorkStats.Movements;
         Stats.IsRunningNow = false;
         Hive->RemoveSubActor(this);
-        if (Movements == 0) {
+        if (WorkStats.Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
             // we failed to balance specific nodes
             for (TNodeId nodeId : Settings.FilterNodeIds) {
@@ -152,7 +167,7 @@ protected:
                 }
             }
         }
-        if (Settings.RecheckOnFinish && Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
+        if (Settings.RecheckOnFinish && Settings.MaxMovements != 0 && WorkStats.Movements >= Settings.MaxMovements) {
             BLOG_D("Balancer initiated recheck");
             Hive->ProcessTabletBalancer();
         } else {
@@ -175,11 +190,11 @@ protected:
 
     bool CanKickNextTablet() const {
         return KickInFlight < Settings.MaxInFlight
-               && (Settings.MaxMovements == 0 || Movements < Settings.MaxMovements);
+               && (Settings.MaxMovements == 0 || WorkStats.Movements < Settings.MaxMovements);
     }
 
     void UpdateProgress() {
-        Stats.CurrentMovements = Movements;
+        Stats.CurrentMovements = WorkStats.Movements;
     }
 
     void BalanceNodes() {
@@ -234,6 +249,7 @@ protected:
             if (node == nullptr) {
                 continue;
             }
+            ++WorkStats.NodesVisited;
             BLOG_TRACE("Balancer selected node " << node->Id);
             auto itTablets = node->Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
             if (itTablets == node->Tablets.end()) {
@@ -287,11 +303,12 @@ protected:
             }
             NextTablet = Tablets.begin();
         }
+        ++WorkStats.TabletsVisited;
         return *(NextTablet++);
     }
 
     void KickNextTablet() {
-        if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
+        if (Settings.MaxMovements != 0 && WorkStats.Movements >= Settings.MaxMovements) {
             if (KickInFlight > 0) {
                 return;
             } else {
@@ -324,7 +341,7 @@ protected:
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
-                    ++Movements;
+                    ++WorkStats.Movements;
                     BLOG_D("Balancer moving tablet " << tablet->ToString()
                            << " from node " << tablet->Node->Id
                            << " to node " << node->Id);
@@ -357,7 +374,6 @@ public:
     THiveBalancer(THive* hive, TBalancerSettings&& settings)
         : Hive(hive)
         , KickInFlight(0)
-        , Movements(0)
         , Settings(std::move(settings))
         , Stats(Hive->BalancerStats[static_cast<std::size_t>(Settings.Type)])
     {
@@ -395,3 +411,10 @@ void THive::StartHiveBalancer(TBalancerSettings&& settings) {
 
 } // NHive
 } // NKikimr
+
+
+template<>
+void Out<NKikimr::NHive::THiveBalancer::TWorkStats>(IOutputStream& o,
+        typename TTypeTraits<NKikimr::NHive::THiveBalancer::TWorkStats>::TFuncParam x) {
+    x.Output(o);
+}
