@@ -432,10 +432,9 @@ Y_UNIT_TEST_SUITE(THiveBalancerTest) {
         static constexpr ui32 OVERLOADED_NODES = 2;
         static constexpr ui64 NUM_TABLETS = 800;
         static constexpr ui64 NUM_TABLETS_TO_OVERLOADED_NODES = NUM_TABLETS * 5 / 8;
-        // CPU is measured in microseconds per second, 1'000'000 = 1 CPU (full core)
-        static constexpr ui64 NODE_MAX_CPU = 20'000'000; // 20 CPU per node
+        static constexpr ui64 NODE_MAX_CPU = 30'000'000; // 1'000'000 per CPU
         static constexpr ui64 TABLET_MAX_CPU = 300'000; // each tablet uses 0.0 .. 0.3 CPU
-        static constexpr double NODE_TOTAL_CPU_MULTIPLIER = 1.4; // node usage exceeds the sum of its tablets
+        static constexpr double NODE_TOTAL_CPU_MULTIPLIER = 1.4; // common node usage is NODE_TOTAL_CPU_MULTIPLIER * sum usage for all tablets
         static constexpr ui64 FIRST_TABLET_ID = 1'000;
         // TLocal sends batches of updated tablet metrics to hive with this interval
         // (TABLET_METRICS_BATCH_INTERVAL in local.cpp - a constant, not a config setting)
@@ -467,7 +466,9 @@ Y_UNIT_TEST_SUITE(THiveBalancerTest) {
         }
 
         // deliver the initial metrics through the standard handler
-        env.SendNodeMetrics();
+        for (int i = 0; i < 5; ++i) {
+            env.SendNodeMetrics();
+        }
 
         std::vector<double> initialUsages = env.GetNodeUsages(EResourceToBalance::CPU);
         double initialScatter = env.GetCpuScatter();
@@ -485,22 +486,26 @@ Y_UNIT_TEST_SUITE(THiveBalancerTest) {
         ui32 waves = 0;
         ui32 stableWaves = 0;
         ui64 lastMovements = 0;
+        ui64 step = 0;
         while (stableWaves < STABLE_WAVES_TO_STOP && waves < MAX_WAVES) {
             for (TDuration time; time < METRICS_PERIOD; time += balancerPeriod) {
                 env.AdvanceTime(balancerPeriod);
-            }
-            env.RunInHive([&env]() {
-                for (TNodeId nodeId : env.GetNodeIds()) {
-                    Cerr << "Node " << nodeId << " runs "
-                          << env.GetHive()->FindNode(nodeId)->GetTabletsRunning() << " tablets" << Endl;
+                if (++step % 10 == 0) {
+                    env.RunInHive([&env]() {
+                        for (TNodeId nodeId : env.GetNodeIds()) {
+                            Cerr << "Node " << nodeId << " runs "
+                                << env.GetHive()->FindNode(nodeId)->GetTabletsRunning() << " tablets" << Endl;
+                        }
+                    });
                 }
-            });
+            }
             env.SendNodeMetrics();
             ++waves;
             ui64 movements = env.GetTotalBalancerMovements();
             stableWaves = movements == lastMovements ? stableWaves + 1 : 0;
             Cerr << "Wave " << waves << ": " << movements - lastMovements << " movements, "
-                  << movements << " total, scatter " << env.GetCpuScatter() << Endl;
+                  << movements << " total, scatter " << env.GetCpuScatter()
+                  << ", usage: " << env.GetNodeUsages(EResourceToBalance::CPU) << Endl;
             lastMovements = movements;
         }
 
