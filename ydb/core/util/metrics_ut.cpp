@@ -135,6 +135,25 @@ Y_UNIT_TEST_SUITE(TExponentialMovingAverageValueTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(std::get<0>(avg.GetValue()), 0.0, Eps);
     }
 
+    Y_UNIT_TEST(CompareWithDecayingAverage) {
+        constexpr TDuration period = TDuration::Seconds(5);
+        TExponentialMovingAverageValue<double> ma(period / 2);
+        TDecayingAverageValue<ui64, period.GetValue()> da;
+        const double stableValueBefore = 100000.0;
+        const TInstant startTime = TInstant::MilliSeconds(100);
+        da.Set(ui64(stableValueBefore), startTime);
+        for (TInstant t = startTime; t < TInstant::Seconds(10); t += TDuration::MilliSeconds(100)) {
+            ma.Push(stableValueBefore, t);
+            if (t > startTime) {
+                da.Increment(0, t);
+            }
+        }
+        UNIT_ASSERT(da.IsValueReady());
+        UNIT_ASSERT(ma.IsValueReady());
+        UNIT_ASSERT_DOUBLES_EQUAL(ma.GetValue(), stableValueBefore, Eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(da.GetValue(), stableValueBefore, Eps);
+    }
+
 }
 
 } // NMetrics
