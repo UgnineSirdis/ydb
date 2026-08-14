@@ -401,7 +401,7 @@ public:
         LastUpdate = time;
     }
 
-    const ValueType& GetValue() const {
+    ValueType GetValue() const {
         return AverageValue;
     }
 
