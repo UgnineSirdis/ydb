@@ -142,8 +142,8 @@ Y_UNIT_TEST_SUITE(TExponentialMovingAverageValueTest) {
         // We have stabilized value, then it increases by 50%
         // See how fast two metrics react on the value increasing
         constexpr TDuration period = TDuration::Seconds(5);
-        TExponentialMovingAverageValue<double> ma(period / 2); // new value will be with coefficient of 3/4 after period
-        TDecayingAverageValue<ui64, period.GetValue(), TDuration::Seconds(1).GetValue()> da; // new value will be with coefficient of 3/4 after period (see TDecayingAverageValue::GetSumOfAverages)
+        TExponentialMovingAverageValue<double> ma(period / 2); // new value will be with coefficient of 3/4 after `period`
+        TDecayingAverageValue<ui64, period.GetValue(), TDuration::Seconds(1).GetValue()> da; // new value will be with coefficient of 3/4 after `period` (see TDecayingAverageValue::GetSumOfAverages)
         const double stableValueBefore = 100000.0;
         const double stableValueNormalizedBefore = stableValueBefore * 10;
         const TInstant startTime = TInstant::MilliSeconds(100);
