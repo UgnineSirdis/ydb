@@ -3,6 +3,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <format>
+
 namespace NKikimr {
 namespace NMetrics {
 
@@ -136,22 +138,48 @@ Y_UNIT_TEST_SUITE(TExponentialMovingAverageValueTest) {
     }
 
     Y_UNIT_TEST(CompareWithDecayingAverage) {
+        // Compare two metrics.
+        // We have stabilized value, then it increases by 50%
+        // See how fast two metrics react on the value increasing
         constexpr TDuration period = TDuration::Seconds(5);
         TExponentialMovingAverageValue<double> ma(period / 2);
-        TDecayingAverageValue<ui64, period.GetValue()> da;
+        TDecayingAverageValue<ui64, period.GetValue(), TDuration::Seconds(1).GetValue()> da;
         const double stableValueBefore = 100000.0;
+        const double stableValueNormalizedBefore = stableValueBefore * 10;
         const TInstant startTime = TInstant::MilliSeconds(100);
-        da.Set(ui64(stableValueBefore), startTime);
-        for (TInstant t = startTime; t < TInstant::Seconds(10); t += TDuration::MilliSeconds(100)) {
-            ma.Push(stableValueBefore, t);
+        const TDuration deltaTime = TDuration::MilliSeconds(100);
+        TInstant t = startTime;
+        TInstant stabilizationTime = TInstant::Seconds(10);
+        //da.Set(ui64(stableValueNormalizedBefore), startTime);
+        for (; t < stabilizationTime; t += deltaTime) {
+            ma.Push(stableValueNormalizedBefore, t);
             if (t > startTime) {
-                da.Increment(0, t);
+                da.Increment(ui64(stableValueBefore), t);
             }
         }
         UNIT_ASSERT(da.IsValueReady());
         UNIT_ASSERT(ma.IsValueReady());
-        UNIT_ASSERT_DOUBLES_EQUAL(ma.GetValue(), stableValueBefore, Eps);
-        UNIT_ASSERT_DOUBLES_EQUAL(da.GetValue(), stableValueBefore, Eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(ma.GetValue(), stableValueNormalizedBefore, Eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(da.GetValue(), stableValueNormalizedBefore, Eps);
+
+        auto formatValue = [](auto v, auto oldValue) {
+            const double percents = (static_cast<double>(v) / static_cast<double>(oldValue) - 1.0) * 100.0;
+            return TString(std::format("{} ({:+.2f}%)", static_cast<ui64>(v), percents));
+        };
+
+        const double valueAfter = 150000.0;
+        const double valueNormalizedAfter = valueAfter * 10;
+        Cerr << "Old value. " << formatValue(ma.GetValue(), stableValueNormalizedBefore) << Endl;
+        Cerr << "New value. " << formatValue(valueNormalizedAfter, stableValueNormalizedBefore) << Endl;
+        for (int step = 1; step <= 20; ++step) {
+            for (; t < stabilizationTime + TDuration::Seconds(1) * step; t += deltaTime) {
+                ma.Push(valueNormalizedAfter, t);
+                if (t > startTime) {
+                    da.Increment(ui64(valueAfter), t);
+                }
+            }
+            Cerr << "Step " << step << ". Moving average: " << formatValue(ma.GetValue(), stableValueNormalizedBefore) << ". Decaying average: " << formatValue(da.GetValue(), stableValueNormalizedBefore) << Endl;
+        }
     }
 
 }
